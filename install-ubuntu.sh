@@ -1,10 +1,7 @@
 #!/bin/sh
-# ==========================================
 # LIN 极简流量监控与伪面板 一键安装脚本
-# 适配系统: Ubuntu (Interactive Edition v1.0)
-# ==========================================
+# 适配系统: Ubuntu (Interactive Edition v1.0.0)
 
-# ---- 颜色变量 ----
 C_CYAN='\033[1;36m'
 C_YELLOW='\033[1;33m'
 C_GREEN='\033[1;32m'
@@ -12,7 +9,6 @@ C_WHITE='\033[1;37m'
 C_RED='\033[1;31m'
 C_RESET='\033[0m'
 
-# ---- 打印 Logo ----
 clear
 echo -e "${C_CYAN}"
 echo '    __  ____ _  __          ____                   __'
@@ -21,14 +17,13 @@ echo '  / /  / / /    /  ______ / /_/ / __ `/ __ \/ _ \/ /'
 echo ' / /__/ / / /|  / /_____// ____/ /_/ / / / /  __/ /'
 echo '/____/___/_/ |_/        /_/    \__,_/_/ /_/\___/_/'
 echo -e "${C_RESET}"
-echo -e "${C_YELLOW}           极简流量监控伪面板 · v1.0${C_RESET}"
+echo -e "${C_YELLOW}           极简流量监控伪面板 · v1.0.0${C_RESET}"
 echo ""
 echo -e "${C_CYAN}╭──────────────────────────────────────────────────────────────╮${C_RESET}"
 echo -e "${C_YELLOW}│              欢迎使用 LIN 一键安装脚本                       │${C_RESET}"
 echo -e "${C_CYAN}╰──────────────────────────────────────────────────────────────╯${C_RESET}"
 echo ""
 
-# ==================== 交互式配置 ====================
 echo -e "${C_CYAN}┌──────────── 自定义配置 ────────────┐${C_RESET}"
 echo ""
 
@@ -102,7 +97,6 @@ echo ""
 echo -e "${C_CYAN}└────────────────────────────────────┘${C_RESET}"
 echo ""
 
-# ==================== 开始安装 ====================
 echo -e "${C_GREEN}[1/7] 🌐 时区配置${C_RESET}"
 
 CURRENT_TZ=$(cat /etc/timezone 2>/dev/null || date +%Z)
@@ -342,15 +336,18 @@ show_speed() {
     echo -e "\${C_GREEN}  ⚡ 实时流速 (2 秒采样)\${C_RESET}"
     echo -e "\${C_CYAN}  ──────────────────────────────────────────────────────────\${C_RESET}"
     IFACE=\$(ip route 2>/dev/null | awk '/default/{print \$5; exit}')
+    if [ -z "\$IFACE" ]; then
+        IFACE=\$(awk 'NR>2{gsub(/:/,\" \"); if(\$1!=\"lo\"){print \$1; exit}}' /proc/net/dev)
+    fi
     [ -z "\$IFACE" ] && IFACE="eth0"
     if [ -f /proc/net/dev ]; then
-        R1=\$(awk -v iface="\$IFACE" "\$0~iface\":{gsub(/:/,\" \"); print \\\$2}" /proc/net/dev)
-        T1=\$(awk -v iface="\$IFACE" "\$0~iface\":{gsub(/:/,\" \"); print \\\$10}" /proc/net/dev)
+        R1=\$(awk -v iface="\$IFACE" 'index(\$0, iface\":\")==1 || \$0~\" \"iface\":\"{gsub(/:/,\" \"); print \\\$2}' /proc/net/dev)
+        T1=\$(awk -v iface="\$IFACE" 'index(\$0, iface\":\")==1 || \$0~\" \"iface\":\"{gsub(/:/,\" \"); print \\\$10}' /proc/net/dev)
         [ -z "\$R1" ] && R1=0; [ -z "\$T1" ] && T1=0
         echo -e "  \${C_WHITE}采样中，请稍候...\${C_RESET}"
         sleep 2
-        R2=\$(awk -v iface="\$IFACE" "\$0~iface\":{gsub(/:/,\" \"); print \\\$2}" /proc/net/dev)
-        T2=\$(awk -v iface="\$IFACE" "\$0~iface\":{gsub(/:/,\" \"); print \\\$10}" /proc/net/dev)
+        R2=\$(awk -v iface="\$IFACE" 'index(\$0, iface\":\")==1 || \$0~\" \"iface\":\"{gsub(/:/,\" \"); print \\\$2}' /proc/net/dev)
+        T2=\$(awk -v iface="\$IFACE" 'index(\$0, iface\":\")==1 || \$0~\" \"iface\":\"{gsub(/:/,\" \"); print \\\$10}' /proc/net/dev)
         [ -z "\$R2" ] && R2=0; [ -z "\$T2" ] && T2=0
         DL=\$(( (R2 - R1) / 1024 / 2 ))
         UL=\$(( (T2 - T1) / 1024 / 2 ))
@@ -362,6 +359,46 @@ show_speed() {
     echo -e "\${C_CYAN}  ──────────────────────────────────────────────────────────\${C_RESET}"
 }
 
+do_uninstall() {
+    echo ""
+    echo -e "\${C_RED}  ⚠️  即将卸载 LIN-Panel 及所有相关文件\${C_RESET}"
+    printf "  确认卸载？[y/N]: "
+    read CONFIRM
+    if [ "\$CONFIRM" != "y" ] && [ "\$CONFIRM" != "Y" ]; then
+        echo -e "  \${C_GREEN}已取消\${C_RESET}"
+        return
+    fi
+    echo ""
+    echo -e "  \${C_WHITE}正在清理...\${C_RESET}"
+    rm -f /root/lin-panel.sh /root/lin-panel-en.sh
+    echo -e "  ✅ 面板脚本已删除"
+    rm -f /root/traffic_reset.sh /root/traffic_check.sh
+    echo -e "  ✅ 重置/推送脚本已删除"
+    rm -f /root/traffic_history.log
+    echo -e "  ✅ 流量日志已删除"
+    rm -f /usr/local/bin/lin-panel
+    echo -e "  ✅ 快捷命令已删除"
+   
+    EXISTING=\$(crontab -l 2>/dev/null || true)
+    CLEANED=\$(echo "\$EXISTING" | grep -v 'traffic_history\|traffic_reset\|traffic_check')
+    echo "\$CLEANED" | sed '/^$/d' | crontab - 2>/dev/null
+    echo -e "  ✅ 定时任务已清理"
+   
+    if [ -f /root/.profile ]; then
+        sed -i '/lin-panel/d' /root/.profile
+        echo -e "  ✅ 登录自启已移除"
+    fi
+    echo ""
+    echo -e "\${C_CYAN}  ──────────────────────────────────────────────\${C_RESET}"
+    echo -e "\${C_GREEN}  🎉 卸载完成！\${C_RESET}"
+    echo ""
+    echo -e "\${C_WHITE}  如果有不满意的地方，欢迎提交反馈：\${C_RESET}"
+    echo -e "\${C_YELLOW}  🔗 https://github.com/linjunhao024-byte/alpine-vnstat-panel/issues\${C_RESET}"
+    echo -e "\${C_CYAN}  ──────────────────────────────────────────────\${C_RESET}"
+    echo ""
+    exit 0
+}
+
 show_menu() {
     echo ""
     echo -e "\${C_CYAN}  ┌──── 操作菜单 ────┐\${C_RESET}"
@@ -369,6 +406,7 @@ show_menu() {
     echo -e "\${C_CYAN}  │\${C_RESET}  \${C_WHITE}[2] 近7天趋势     \${C_CYAN}│\${C_RESET}"
     echo -e "\${C_CYAN}  │\${C_RESET}  \${C_WHITE}[3] 连接概览     \${C_CYAN}│\${C_RESET}"
     echo -e "\${C_CYAN}  │\${C_RESET}  \${C_WHITE}[4] 实时流速     \${C_CYAN}│\${C_RESET}"
+    echo -e "\${C_CYAN}  │\${C_RESET}  \${C_RED}[5] 一键卸载     \${C_CYAN}│\${C_RESET}"
     echo -e "\${C_CYAN}  │\${C_RESET}  \${C_RED}[0] 退出         \${C_CYAN}│\${C_RESET}"
     echo -e "\${C_CYAN}  └──────────────────┘\${C_RESET}"
 }
@@ -384,6 +422,7 @@ while true; do
         2) show_trend ;;
         3) show_conn ;;
         4) show_speed ;;
+        5) do_uninstall ;;
         0|"") echo -e "\n  \${C_GREEN}👋 已退出面板\${C_RESET}"; exit 0 ;;
         *) echo -e "  \${C_RED}无效选项，请重新输入\${C_RESET}" ;;
     esac
@@ -404,14 +443,11 @@ chmod +x /root/traffic_reset.sh
 
 echo -e "${C_GREEN}[5/7] 📊 正在配置每日流量记录与自动清理...${C_RESET}"
 
-# 读取现有 crontab，备份后追加我们的条目（不覆盖用户原有定时任务）
 EXISTING_CRON=$(crontab -l 2>/dev/null || true)
 
-# 趋势记录 + 自动保留最近 30 天（超出部分裁剪，防止日志无限增长）
 CRON_TREND='59 23 * * * echo "$(date +%Y-%m-%d) $(vnstat -m | awk '\''/total/{print $NF}'\'')" >> /root/traffic_history.log && tail -30 /root/traffic_history.log > /tmp/.tl && mv /tmp/.tl /root/traffic_history.log'
 CRON_RESET="${MINUTE} ${HOUR} ${DAY} * * sleep ${SECOND} && /root/traffic_reset.sh"
 
-# 升级兼容：移除旧版（无清理功能的）趋势记录条目，稍后重新添加带清理的新版
 EXISTING_CRON=$(echo "$EXISTING_CRON" | grep -v 'traffic_history\.log')
 
 NEW_ENTRIES=""
@@ -450,7 +486,7 @@ if [ "$TG_ENABLE" = "Y" ] || [ "$TG_ENABLE" = "y" ]; then
     printf "    [3] 每月汇报\n"
     printf "  请选择 [1/2/3] [默认: 1]: "
     read TG_FREQ
-    # 月报：在重置日前一天 12:00 推送（重置前 12 小时）
+   
     PUSH_DAY=$((DAY - 1))
     [ "$PUSH_DAY" -lt 1 ] && PUSH_DAY=28
     case "$TG_FREQ" in
@@ -507,7 +543,7 @@ curl -s -X POST "https://api.telegram.org/bot\${TG_TOKEN}/sendMessage" \\
 TGEOF
     chmod +x /root/traffic_check.sh
 
-    # 添加推送 cron（幂等）
+   
     EXISTING_CRON=$(crontab -l 2>/dev/null || true)
     EXISTING_CRON=$(echo "$EXISTING_CRON" | grep -v 'traffic_check\.sh')
     if ! echo "$EXISTING_CRON" | grep -qF 'traffic_check.sh'; then
@@ -548,5 +584,5 @@ echo -e "${C_WHITE}快捷命令: ${C_YELLOW}${CMD}${C_WHITE} (随时可用)${C_R
 echo -e "${C_CYAN}────────────────────────────────────────────────────────────────${C_RESET}"
 echo ""
 echo -e "${C_YELLOW}  ⭐ 如果这个面板对你有帮助，请给个 Star 支持一下！${C_RESET}"
-echo -e "${C_WHITE}  🔗 https://github.com/linjunhao024-byte/lin-panel${C_RESET}"
+echo -e "${C_WHITE}  🔗 https://github.com/linjunhao024-byte/alpine-vnstat-panel${C_RESET}"
 echo ""

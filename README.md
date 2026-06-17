@@ -10,7 +10,7 @@
 
 **如果这个项目对你有帮助，请给一个 ⭐ Star！**
 
-![Stars](https://img.shields.io/github/stars/linjunhao024-byte/lin-panel?style=social)
+![Stars](https://img.shields.io/github/stars/linjunhao024-byte/alpine-vnstat-panel?style=social)
 
 # 📊 LIN-Panel
 
@@ -149,19 +149,19 @@
 ### Alpine Linux
 
 ```bash
-wget -O install.sh https://raw.githubusercontent.com/linjunhao024-byte/lin-panel/main/install.sh && chmod +x install.sh && ./install.sh
+wget -O install.sh https://raw.githubusercontent.com/linjunhao024-byte/alpine-vnstat-panel/main/install.sh && chmod +x install.sh && ./install.sh
 ```
 
 ### Debian
 
 ```bash
-wget -O install-debian.sh https://raw.githubusercontent.com/linjunhao024-byte/lin-panel/main/install-debian.sh && chmod +x install-debian.sh && ./install-debian.sh
+wget -O install-debian.sh https://raw.githubusercontent.com/linjunhao024-byte/alpine-vnstat-panel/main/install-debian.sh && chmod +x install-debian.sh && ./install-debian.sh
 ```
 
 ### Ubuntu
 
 ```bash
-wget -O install-ubuntu.sh https://raw.githubusercontent.com/linjunhao024-byte/lin-panel/main/install-ubuntu.sh && chmod +x install-ubuntu.sh && ./install-ubuntu.sh
+wget -O install-ubuntu.sh https://raw.githubusercontent.com/linjunhao024-byte/alpine-vnstat-panel/main/install-ubuntu.sh && chmod +x install-ubuntu.sh && ./install-ubuntu.sh
 ```
 
 ### 英文版面板
@@ -170,20 +170,20 @@ wget -O install-ubuntu.sh https://raw.githubusercontent.com/linjunhao024-byte/li
 
 ```bash
 # Alpine Linux (English Panel)
-wget -O install-alpine-en.sh https://raw.githubusercontent.com/linjunhao024-byte/lin-panel/main/install-alpine-en.sh && chmod +x install-alpine-en.sh && ./install-alpine-en.sh
+wget -O install-alpine-en.sh https://raw.githubusercontent.com/linjunhao024-byte/alpine-vnstat-panel/main/install-alpine-en.sh && chmod +x install-alpine-en.sh && ./install-alpine-en.sh
 
 # Debian (English Panel)
-wget -O install-debian-en.sh https://raw.githubusercontent.com/linjunhao024-byte/lin-panel/main/install-debian-en.sh && chmod +x install-debian-en.sh && ./install-debian-en.sh
+wget -O install-debian-en.sh https://raw.githubusercontent.com/linjunhao024-byte/alpine-vnstat-panel/main/install-debian-en.sh && chmod +x install-debian-en.sh && ./install-debian-en.sh
 
 # Ubuntu (English Panel)
-wget -O install-ubuntu-en.sh https://raw.githubusercontent.com/linjunhao024-byte/lin-panel/main/install-ubuntu-en.sh && chmod +x install-ubuntu-en.sh && ./install-ubuntu-en.sh
+wget -O install-ubuntu-en.sh https://raw.githubusercontent.com/linjunhao024-byte/alpine-vnstat-panel/main/install-ubuntu-en.sh && chmod +x install-ubuntu-en.sh && ./install-ubuntu-en.sh
 ```
 
 ### 或者克隆安装
 
 ```bash
-git clone https://github.com/linjunhao024-byte/lin-panel.git
-cd lin-panel
+git clone https://github.com/linjunhao024-byte/alpine-vnstat-panel.git
+cd alpine-vnstat-panel
 # 根据系统选择：
 chmod +x install.sh && ./install.sh           # Alpine
 chmod +x install-debian.sh && ./install-debian.sh  # Debian
@@ -450,6 +450,6 @@ crontab -e
 
 <br>
 
-![Star](https://img.shields.io/github/stars/linjunhao024-byte/lin-panel?style=social)
+![Star](https://img.shields.io/github/stars/linjunhao024-byte/alpine-vnstat-panel?style=social)
 
 </div>
