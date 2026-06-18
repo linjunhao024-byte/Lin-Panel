@@ -1,6 +1,4 @@
 #!/bin/bash
-# LIN 极简流量监控与伪面板 一键安装脚本
-# 适配系统: Ubuntu (Interactive Edition v1.0.0)
 
 C_CYAN='\033[1;36m'
 C_YELLOW='\033[1;33m'
@@ -27,14 +25,12 @@ echo ""
 echo -e "${C_CYAN}┌──────────── 自定义配置 ────────────┐${C_RESET}"
 echo ""
 
-# 1. 流量上限自定义
 printf "请输入流量上限(GB) [默认: 350]: "
 read LIMIT
 LIMIT="${LIMIT:-350}"
 echo -e "  -> 流量上限设置为: ${C_YELLOW}${LIMIT}GB${C_RESET}"
 echo ""
 
-# 2. 计费模式
 printf "请选择计费模式\n"
 printf "  [1] 双向计费 (入站+出站) [默认]\n"
 printf "  [2] 入站计费 (仅下载)\n"
@@ -48,7 +44,6 @@ case "$BILLING" in
 esac
 echo ""
 
-# 3. 重置时间自定义
 printf "请输入每月流量重置时间\n"
 printf "  日期 (1-31) [默认 1]: "
 read DAY
@@ -76,7 +71,6 @@ esac
 echo -e "  -> 重置时间设置为: 每月 ${C_YELLOW}${DAY}日 ${HOUR}:${MINUTE}:${SECOND}${C_RESET}"
 echo ""
 
-# 4. 是否开启登录自启
 printf "是否在每次通过 SSH 登录服务器时，自动展示流量监控面板？[Y/n] [默认: Y]: "
 read LOGIN_AUTO
 if [ "$LOGIN_AUTO" = "N" ] || [ "$LOGIN_AUTO" = "n" ]; then
@@ -88,7 +82,6 @@ else
 fi
 echo ""
 
-# 5. 自定义快捷命令名
 printf "请输入您的快捷命令名称 [默认: lin-panel]: "
 read CMD
 CMD="${CMD:-lin-panel}"
@@ -97,7 +90,6 @@ esac
 echo -e "  -> 快捷命令设置为: ${C_YELLOW}${CMD}${C_RESET}"
 echo ""
 
-# 6. 已使用流量基线
 printf "服务器是否已运行一段时间？请输入本月已使用流量(GB) [默认: 0]: "
 read BASELINE
 BASELINE="${BASELINE:-0}"
@@ -269,12 +261,28 @@ if [ -n "\$CDOWN" ]; then
 fi
 echo -e "\${C_CYAN}────────────────────────────────────────────────────────────────\${C_RESET}"
 echo ""
-VSTAT_M=\$(vnstat -m 2>/dev/null | sed -e 's/-/─/g' -e 's/+/┼/g' -e 's/|/│/g')
+VSTAT_M=\$(vnstat -m 2>/dev/null | sed \\
+    -e 's/rx/入站(RX)/g' \\
+    -e 's/tx/出站(TX)/g' \\
+    -e 's/total/合计(Total)/g' \\
+    -e 's/estimated/预计/g' \\
+    -e 's/month/月份/g' \\
+    -e 's/-/─/g' \\
+    -e 's/+/┼/g' \\
+    -e 's/|/│/g')
 printf "\${C_CYAN}%s\n\${C_RESET}" "\$VSTAT_M"
 
 echo ""
 echo -e "\${C_GREEN}  📅 每日流量明细\${C_RESET}"
-VSTAT_D=\$(vnstat -d 2>/dev/null | sed -e 's/-/─/g' -e 's/+/┼/g' -e 's/|/│/g')
+VSTAT_D=\$(vnstat -d 2>/dev/null | sed \\
+    -e 's/rx/入站(RX)/g' \\
+    -e 's/tx/出站(TX)/g' \\
+    -e 's/total/合计(Total)/g' \\
+    -e 's/estimated/预计/g' \\
+    -e 's/day/日期/g' \\
+    -e 's/-/─/g' \\
+    -e 's/+/┼/g' \\
+    -e 's/|/│/g')
 printf "\${C_CYAN}%s\n\${C_RESET}" "\$VSTAT_D"
 
 show_trend() {

@@ -1,6 +1,4 @@
 #!/bin/bash
-# LIN Minimalist Traffic Panel Installer
-# Target: Debian (Interactive Edition v1.0.0)
 
 C_CYAN='\033[1;36m'
 C_YELLOW='\033[1;33m'
@@ -27,14 +25,12 @@ echo ""
 echo -e "${C_CYAN}┌──────────── Configuration ────────────┐${C_RESET}"
 echo ""
 
-# 1. 流量上限自定义
 printf "Enter traffic limit (GB) [default: 350]: "
 read LIMIT
 LIMIT="${LIMIT:-350}"
 echo -e "  -> Traffic limit: ${C_YELLOW}${LIMIT}GB${C_RESET}"
 echo ""
 
-# 2. Billing mode
 printf "Select billing mode\n"
 printf "  [1] Bidirectional [default]\n"
 printf "  [2] Inbound only\n"
@@ -48,36 +44,34 @@ case "$BILLING" in
 esac
 echo ""
 
-# 3. 重置时间自定义
 printf "Enter monthly reset time\n"
 printf "  Day (1-31) [default 1]: "
 read DAY
 DAY="${DAY:-1}"
-case "$DAY" in [1-9]|[12][0-9]|3[01]) ;; *) echo -e "  ${C_RED}⚠ 日期invalid, default 1${C_RESET}"; DAY=1 ;;
+case "$DAY" in [1-9]|[12][0-9]|3[01]) ;; *) echo -e "  ${C_RED}⚠ Day invalid, default 1${C_RESET}"; DAY=1 ;;
 esac
 
 printf "  Hour (0-23) [default 0]: "
 read HOUR
 HOUR="${HOUR:-0}"
-case "$HOUR" in [0-9]|1[0-9]|2[0-3]) ;; *) echo -e "  ${C_RED}⚠ 小时invalid, default 0${C_RESET}"; HOUR=0 ;;
+case "$HOUR" in [0-9]|1[0-9]|2[0-3]) ;; *) echo -e "  ${C_RED}⚠ Hour invalid, default 0${C_RESET}"; HOUR=0 ;;
 esac
 
 printf "  Minute (0-59) [default 0]: "
 read MINUTE
 MINUTE="${MINUTE:-0}"
-case "$MINUTE" in [0-9]|[1-4][0-9]|5[0-9]) ;; *) echo -e "  ${C_RED}⚠ 分钟invalid, default 0${C_RESET}"; MINUTE=0 ;;
+case "$MINUTE" in [0-9]|[1-4][0-9]|5[0-9]) ;; *) echo -e "  ${C_RED}⚠ Minute invalid, default 0${C_RESET}"; MINUTE=0 ;;
 esac
 
 printf "  Second (0-59) [default 0]: "
 read SECOND
 SECOND="${SECOND:-0}"
-case "$SECOND" in [0-9]|[1-4][0-9]|5[0-9]) ;; *) echo -e "  ${C_RED}⚠ 秒数invalid, default 0${C_RESET}"; SECOND=0 ;;
+case "$SECOND" in [0-9]|[1-4][0-9]|5[0-9]) ;; *) echo -e "  ${C_RED}⚠ Second invalid, default 0${C_RESET}"; SECOND=0 ;;
 esac
-echo -e "  -> Reset: Monthly ${C_YELLOW}${DAY}日 ${HOUR}:${MINUTE}:${SECOND}${C_RESET}"
+echo -e "  -> Reset: Monthly ${C_YELLOW}${DAY} ${HOUR}:${MINUTE}:${SECOND}${C_RESET}"
 echo ""
 
-# 4. 是否开启登录自启
-printf "Show panel on SSH login？[Y/n] [default: Y]: "
+printf "Show panel on SSH login? [Y/n] [default: Y]: "
 read LOGIN_AUTO
 if [ "$LOGIN_AUTO" = "N" ] || [ "$LOGIN_AUTO" = "n" ]; then
     ENABLE_LOGIN_AUTO=0
@@ -88,7 +82,6 @@ else
 fi
 echo ""
 
-# 5. 自定义快捷命令名
 printf "Enter command name [default: lin-panel]: "
 read CMD
 CMD="${CMD:-lin-panel}"
@@ -97,11 +90,10 @@ esac
 echo -e "  -> Command: ${C_YELLOW}${CMD}${C_RESET}"
 echo ""
 
-# 6. 已使用流量基线
 printf "Has the server been running? Enter traffic already used (GB) [default: 0]: "
 read BASELINE
 BASELINE="${BASELINE:-0}"
-case "$BASELINE" in *[!0-9.]*) echo -e "  ${C_RED}⚠ 输入invalid, default 0${C_RESET}"; BASELINE=0 ;; esac
+case "$BASELINE" in *[!0-9.]*) echo -e "  ${C_RED}⚠ Invalid input, default 0${C_RESET}"; BASELINE=0 ;; esac
 if [ "$BASELINE" != "0" ]; then
     echo -e "  -> Traffic baseline: ${C_YELLOW}${BASELINE}GB${C_RESET} (added to vnstat stats)"
 else
@@ -245,7 +237,7 @@ if [ -n "\$NEXT_S" ] && [ "\$NEXT_S" -gt "\$NOW_S" ]; then
     CD_D=\$((\$DIFF / 86400))
     CD_H=\$((\$DIFF % 86400 / 3600))
     CD_M=\$((\$DIFF % 3600 / 60))
-    CDOWN=\${CD_D}天\${CD_H}时\${CD_M}分
+    CDOWN=\${CD_D}d \${CD_H}h \${CD_M}m
 fi
 
 clear
@@ -283,7 +275,7 @@ show_trend() {
     echo -e "\${C_CYAN}  ──────────────────────────────────────────────────────────\${C_RESET}"
     TREND=\$(vnstat -d 2>/dev/null | awk '/[0-9]+\\.[0-9]+/{d=\\\$1; v=\\\$NF; if(d~/^[0-9]/) print d" "v}' | tail -7)
     if [ -z "\$TREND" ]; then
-        echo -e "  \${C_WHITE}暂无历史数据\${C_RESET}"
+        echo -e "  \${C_WHITE}No history data\${C_RESET}"
     else
         MAX_V=\$(echo "\$TREND" | awk '{if(\\\$2+0>max)max=\\\$2+0}END{print max}')
         echo "\$TREND" | while read DATE VAL; do
@@ -300,7 +292,7 @@ show_trend() {
 
 show_conn() {
     echo ""
-    echo -e "\${C_GREEN}  🌐 网络Connections\${C_RESET}"
+    echo -e "\${C_GREEN}  🌐 Network Connections\${C_RESET}"
     echo -e "\${C_CYAN}  ──────────────────────────────────────────────────────────\${C_RESET}"
     if command -v ss >/dev/null 2>&1; then
         CONN=\$(ss -tun state established 2>/dev/null | tail -n +2 | wc -l)
@@ -314,11 +306,11 @@ show_conn() {
     echo -e "  \${C_WHITE}🔍 Local Ports Top 5:\${C_RESET}"
     if command -v ss >/dev/null 2>&1; then
         ss -tun state established 2>/dev/null | tail -n +2 | awk '{print \$4}' | grep -oE ':[0-9]+' | sort | uniq -c | sort -rn | head -5 | while read CNT PORT; do
-            echo -e "    \${C_YELLOW}\${CNT}\${C_RESET} 次  →  \${C_CYAN}\${PORT}\${C_RESET}"
+            echo -e "    \${C_YELLOW}\${CNT}\${C_RESET} times  →  \${C_CYAN}\${PORT}\${C_RESET}"
         done
     elif command -v netstat >/dev/null 2>&1; then
         netstat -an 2>/dev/null | grep ESTABLISHED | awk '{print \$4}' | grep -oE ':[0-9]+' | sort | uniq -c | sort -rn | head -5 | while read CNT PORT; do
-            echo -e "    \${C_YELLOW}\${CNT}\${C_RESET} 次  →  \${C_CYAN}\${PORT}\${C_RESET}"
+            echo -e "    \${C_YELLOW}\${CNT}\${C_RESET} times  →  \${C_CYAN}\${PORT}\${C_RESET}"
         done
     fi
     echo -e "\${C_CYAN}  ──────────────────────────────────────────────────────────\${C_RESET}"
@@ -353,7 +345,7 @@ show_speed() {
 do_uninstall() {
     echo ""
     echo -e "\${C_RED}  ⚠️  Uninstall LIN-Panel and all files\${C_RESET}"
-    printf "  Confirm uninstall？[y/N]: "
+    printf "  Confirm uninstall? [y/N]: "
     read CONFIRM
     if [ "\$CONFIRM" != "y" ] && [ "\$CONFIRM" != "Y" ]; then
         echo -e "  \${C_GREEN}Cancelled\${C_RESET}"
@@ -380,7 +372,7 @@ do_uninstall() {
         echo -e "  ✅ Login auto-start removed"
     fi
     echo ""
-    printf "  Also uninstall vnstat (traffic tool)？[y/N] [default: N]: "
+    printf "  Also uninstall vnstat (traffic tool)? [y/N] [default: N]: "
     read RM_VNSTAT
     if [ "\$RM_VNSTAT" = "y" ] || [ "\$RM_VNSTAT" = "Y" ]; then
         systemctl stop vnstat 2>/dev/null || systemctl stop vnstat 2>/dev/null
@@ -404,7 +396,7 @@ do_uninstall() {
 
 show_menu() {
     echo ""
-    echo -e "\${C_CYAN}  ┌──── 操作菜单 ────┐\${C_RESET}"
+    echo -e "\${C_CYAN}  ┌──── Menu ────────┐\${C_RESET}"
     echo -e "\${C_CYAN}  │\${C_RESET}  \${C_WHITE}[1] Refresh     \${C_CYAN}│\${C_RESET}"
     echo -e "\${C_CYAN}  │\${C_RESET}  \${C_WHITE}[2] 7-Day Trend     \${C_CYAN}│\${C_RESET}"
     echo -e "\${C_CYAN}  │\${C_RESET}  \${C_WHITE}[3] Connections     \${C_CYAN}│\${C_RESET}"
@@ -496,11 +488,11 @@ fi
 systemctl enable cron >/dev/null 2>&1
 systemctl start cron >/dev/null 2>&1
 
-echo -e "  -> Monthly reset: ${C_YELLOW}Monthly${DAY}日 ${HOUR}:${MINUTE}:${SECOND}${C_RESET}"
+echo -e "  -> Monthly reset: ${C_YELLOW}Day ${DAY} ${HOUR}:${MINUTE}:${SECOND}${C_RESET}"
 
 echo -e "${C_GREEN}[6/7] 📱 Telegram alerts...${C_RESET}"
 
-printf "  Enable Telegram alerts？[Y/n] [default: N]: "
+printf "  Enable Telegram alerts? [Y/n] [default: N]: "
 read TG_ENABLE
 if [ "$TG_ENABLE" = "Y" ] || [ "$TG_ENABLE" = "y" ]; then
     TG_OK=0
@@ -544,8 +536,8 @@ if [ "$TG_ENABLE" = "Y" ] || [ "$TG_ENABLE" = "y" ]; then
     PUSH_DAY=$((DAY - 1))
     [ "$PUSH_DAY" -lt 1 ] && PUSH_DAY=28
     case "$TG_FREQ" in
-        2) TG_CRON="0 12 * * 1" ; TG_LABEL="每周一 12:00" ;;
-        3) TG_CRON="0 12 ${PUSH_DAY} * *" ; TG_LABEL="Monthly${PUSH_DAY}日 12:00 (12h before reset)" ;;
+        2) TG_CRON="0 12 * * 1" ; TG_LABEL="Monday 12:00" ;;
+        3) TG_CRON="0 12 ${PUSH_DAY} * *" ; TG_LABEL="Day ${PUSH_DAY} 12:00 (12h before reset)" ;;
         *) TG_CRON="0 9 * * *" ; TG_LABEL="Daily 09:00" ;;
     esac
 
@@ -618,13 +610,13 @@ echo -e "${C_GREEN}[7/7] 🔐 Login config...${C_RESET}"
 
 if [ "$ENABLE_LOGIN_AUTO" = "1" ]; then
     if grep -q 'lin-panel-en.sh' /root/.profile 2>/dev/null; then
-        echo -e "  -> /root/.profile already configured, skip。"
+        echo -e "  -> /root/.profile already configured, skip."
     else
         echo "/root/lin-panel-en.sh" >> /root/.profile
-        echo -e "  -> Added到 /root/.profile，SSH 登录时将自动展示面板。"
+        echo -e "  -> Added to /root/.profile, panel will auto-show on SSH login."
     fi
 else
-    echo -e "  -> Auto-start disabled。"
+    echo -e "  -> Auto-start disabled."
 fi
 
 ln -sf /root/lin-panel-en.sh /usr/local/bin/"$CMD"
@@ -637,7 +629,7 @@ echo -e "${C_CYAN}╰───────────────────�
 echo ""
 echo -e "${C_WHITE}  Command: ${C_YELLOW}${CMD}${C_WHITE} (always available)${C_RESET}"
 if [ "$ENABLE_LOGIN_AUTO" = "1" ]; then
-    echo -e "${C_WHITE}  Auto-start: ${C_GREEN}ON${C_WHITE} (下次 SSH 登录自动展示)${C_RESET}"
+    echo -e "${C_WHITE}  Auto-start: ${C_GREEN}ON${C_WHITE} (auto-show on SSH login)${C_RESET}"
 fi
 echo ""
 echo -e "${C_YELLOW}  ⏳ vnstat is collecting data, panel will show stats in a few minutes${C_RESET}"
