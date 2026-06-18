@@ -50,10 +50,10 @@ echo ""
 
 # 3. 重置时间自定义
 printf "请输入每月流量重置时间\n"
-printf "  日期 (1-28) [默认 1]: "
+printf "  日期 (1-31) [默认 1]: "
 read DAY
 DAY="${DAY:-1}"
-case "$DAY" in [1-9]|[12][0-8]) ;; *) echo -e "  ${C_RED}⚠ 日期无效，已使用默认值 1${C_RESET}"; DAY=1 ;;
+case "$DAY" in [1-9]|[12][0-9]|3[01]) ;; *) echo -e "  ${C_RED}⚠ 日期无效，已使用默认值 1${C_RESET}"; DAY=1 ;;
 esac
 
 printf "  小时 (0-23) [默认 0]: "
@@ -152,7 +152,7 @@ systemctl enable vnstat >/dev/null 2>&1
 echo -e "${C_GREEN}[3/7] 🎨 正在生成高级 TUI 监控面板...${C_RESET}"
 
 cat << EOF > /root/lin-panel.sh
-#!/bin/sh
+#!/bin/bash
 C_CYAN='\\033[1;36m'
 C_YELLOW='\\033[1;33m'
 C_GREEN='\\033[1;32m'
@@ -337,17 +337,17 @@ show_speed() {
     echo -e "\${C_CYAN}  ──────────────────────────────────────────────────────────\${C_RESET}"
     IFACE=\$(ip route 2>/dev/null | awk '/default/{print \$5; exit}')
     if [ -z "\$IFACE" ]; then
-        IFACE=\$(awk 'NR>2{gsub(/:/,\" \"); if(\$1!=\"lo\"){print \$1; exit}}' /proc/net/dev)
+        IFACE=\$(awk -F: 'NR>2{n=\\\$1; gsub(/ /,\"\",n); if(n!=\"lo\"){print n; exit}}' /proc/net/dev)
     fi
     [ -z "\$IFACE" ] && IFACE="eth0"
     if [ -f /proc/net/dev ]; then
-        R1=\$(awk -v iface="\$IFACE" 'index(\$0, iface\":\")==1 || \$0~\" \"iface\":\"{gsub(/:/,\" \"); print \\\$2}' /proc/net/dev)
-        T1=\$(awk -v iface="\$IFACE" 'index(\$0, iface\":\")==1 || \$0~\" \"iface\":\"{gsub(/:/,\" \"); print \\\$10}' /proc/net/dev)
+        R1=\$(awk -v iface="\$IFACE" '{split(\\\$0,a,/[: ]+/); if(a[1]==iface) print a[2]}' /proc/net/dev)
+        T1=\$(awk -v iface="\$IFACE" '{split(\\\$0,a,/[: ]+/); if(a[1]==iface) print a[10]}' /proc/net/dev)
         [ -z "\$R1" ] && R1=0; [ -z "\$T1" ] && T1=0
         echo -e "  \${C_WHITE}采样中，请稍候...\${C_RESET}"
         sleep 2
-        R2=\$(awk -v iface="\$IFACE" 'index(\$0, iface\":\")==1 || \$0~\" \"iface\":\"{gsub(/:/,\" \"); print \\\$2}' /proc/net/dev)
-        T2=\$(awk -v iface="\$IFACE" 'index(\$0, iface\":\")==1 || \$0~\" \"iface\":\"{gsub(/:/,\" \"); print \\\$10}' /proc/net/dev)
+        R2=\$(awk -v iface="\$IFACE" '{split(\\\$0,a,/[: ]+/); if(a[1]==iface) print a[2]}' /proc/net/dev)
+        T2=\$(awk -v iface="\$IFACE" '{split(\\\$0,a,/[: ]+/); if(a[1]==iface) print a[10]}' /proc/net/dev)
         [ -z "\$R2" ] && R2=0; [ -z "\$T2" ] && T2=0
         DL=\$(( (R2 - R1) / 1024 / 2 ))
         UL=\$(( (T2 - T1) / 1024 / 2 ))
@@ -372,7 +372,7 @@ do_uninstall() {
     echo -e "  \${C_WHITE}正在清理...\${C_RESET}"
     rm -f /root/lin-panel.sh /root/lin-panel-en.sh
     echo -e "  ✅ 面板脚本已删除"
-    rm -f /root/traffic_reset.sh /root/traffic_check.sh
+    rm -f /root/traffic_reset.sh /root/traffic_reset_check.sh /root/traffic_check.sh
     echo -e "  ✅ 重置/推送脚本已删除"
     rm -f /root/traffic_history.log
     echo -e "  ✅ 流量日志已删除"
@@ -433,20 +433,45 @@ chmod +x /root/lin-panel.sh
 
 echo -e "${C_GREEN}[4/7] 🔄 正在配置自动重置脚本...${C_RESET}"
 
-cat << 'EOF' > /root/traffic_reset.sh
+cat << RESEOF > /root/traffic_reset_check.sh
 #!/bin/sh
+RESET_DAY=${DAY}
+RESET_HOUR=${HOUR}
+RESET_MIN=${MINUTE}
+RESET_SEC=${SECOND}
+
+TODAY=\$(date +%d)
+MONTH=\$(date +%m)
+YEAR=\$(date +%Y)
+
+MAX_DAY=31
+case \$MONTH in 02) MAX_DAY=28;; 04|06|09|11) MAX_DAY=30;; esac
+if [ \$((YEAR % 4)) -eq 0 ] && [ "\$MONTH" = "02" ]; then MAX_DAY=29; fi
+
+TARGET_DAY=\$RESET_DAY
+[ "\$TARGET_DAY" -gt "\$MAX_DAY" ] && TARGET_DAY=\$MAX_DAY
+
+if [ "\$TODAY" -ne "\$TARGET_DAY" ]; then
+    exit 0
+fi
+
+NOW_S=\$(date +%s)
+TARGET_S=\$(( \$(date -d "\$YEAR-\$MONTH-\$TARGET_DAY 00:00:00" +%s 2>/dev/null || echo \$NOW_S) + RESET_HOUR * 3600 + RESET_MIN * 60 + RESET_SEC ))
+SLEEP=\$(( TARGET_S - NOW_S ))
+[ "\$SLEEP" -gt 0 ] && sleep "\$SLEEP"
+
 systemctl stop vnstat
 rm -rf /var/lib/vnstat/*
 systemctl start vnstat
-EOF
-chmod +x /root/traffic_reset.sh
+RESEOF
+chmod +x /root/traffic_reset_check.sh
 
 echo -e "${C_GREEN}[5/7] 📊 正在配置每日流量记录与自动清理...${C_RESET}"
 
 EXISTING_CRON=$(crontab -l 2>/dev/null || true)
 
 CRON_TREND='59 23 * * * echo "$(date +%Y-%m-%d) $(vnstat -m | awk '\''/total/{print $NF}'\'')" >> /root/traffic_history.log && tail -30 /root/traffic_history.log > /tmp/.tl && mv /tmp/.tl /root/traffic_history.log'
-CRON_RESET="${MINUTE} ${HOUR} ${DAY} * * sleep ${SECOND} && /root/traffic_reset.sh"
+CRON_RESET="0 0 * * * /root/traffic_reset_check.sh"
 
 EXISTING_CRON=$(echo "$EXISTING_CRON" | grep -v 'traffic_history\.log')
 
@@ -454,7 +479,7 @@ NEW_ENTRIES=""
 if ! echo "$EXISTING_CRON" | grep -qF 'traffic_history.log'; then
     NEW_ENTRIES="${NEW_ENTRIES}${CRON_TREND}\n"
 fi
-if ! echo "$EXISTING_CRON" | grep -qF 'traffic_reset.sh'; then
+if ! echo "$EXISTING_CRON" | grep -qF 'traffic_reset_check.sh'; then
     NEW_ENTRIES="${NEW_ENTRIES}${CRON_RESET}\n"
 fi
 
@@ -575,13 +600,14 @@ echo ""
 echo -e "${C_CYAN}╭──────────────────────────────────────────────────────────────╮${C_RESET}"
 echo -e "${C_GREEN}│                    🎉 安装完成！                             │${C_RESET}"
 echo -e "${C_CYAN}╰──────────────────────────────────────────────────────────────╯${C_RESET}"
+echo ""
+echo -e "${C_WHITE}  快捷命令: ${C_YELLOW}${CMD}${C_WHITE} (随时可用)${C_RESET}"
 if [ "$ENABLE_LOGIN_AUTO" = "1" ]; then
-    echo -e "${C_WHITE}请断开 SSH 重新连接，或直接输入 ${C_YELLOW}source /root/.profile${C_WHITE} 查看效果！${C_RESET}"
-else
-    echo -e "${C_WHITE}手动查看面板请运行: ${C_YELLOW}${CMD}${C_RESET}"
+    echo -e "${C_WHITE}  登录自启: ${C_GREEN}已开启${C_WHITE} (下次 SSH 登录自动展示)${C_RESET}"
 fi
-echo -e "${C_WHITE}快捷命令: ${C_YELLOW}${CMD}${C_WHITE} (随时可用)${C_RESET}"
-echo -e "${C_CYAN}────────────────────────────────────────────────────────────────${C_RESET}"
+echo ""
+echo -e "${C_YELLOW}  ⏳ vnstat 正在收集数据，面板将在几分钟后显示流量统计${C_RESET}"
+echo -e "${C_WHITE}  手动查看: ${C_YELLOW}${CMD}${C_RESET}"
 echo ""
 echo -e "${C_YELLOW}  ⭐ 如果这个面板对你有帮助，请给个 Star 支持一下！${C_RESET}"
 echo -e "${C_WHITE}  🔗 https://github.com/linjunhao024-byte/Lin-Panel${C_RESET}"

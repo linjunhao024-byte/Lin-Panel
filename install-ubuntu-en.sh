@@ -27,7 +27,7 @@ echo ""
 echo -e "${C_CYAN}┌──────────── Configuration ────────────┐${C_RESET}"
 echo ""
 
-# 1. Traffic limit
+# 1. 流量上限自定义
 printf "Enter traffic limit (GB) [default: 350]: "
 read LIMIT
 LIMIT="${LIMIT:-350}"
@@ -50,10 +50,10 @@ echo ""
 
 # 3. 重置时间自定义
 printf "Enter monthly reset time\n"
-printf "  Day (1-28) [default 1]: "
+printf "  Day (1-31) [default 1]: "
 read DAY
 DAY="${DAY:-1}"
-case "$DAY" in [1-9]|[12][0-8]) ;; *) echo -e "  ${C_RED}⚠ Invalid day, default 1${C_RESET}"; DAY=1 ;;
+case "$DAY" in [1-9]|[12][0-9]|3[01]) ;; *) echo -e "  ${C_RED}⚠ 日期invalid, default 1${C_RESET}"; DAY=1 ;;
 esac
 
 printf "  Hour (0-23) [default 0]: "
@@ -152,7 +152,7 @@ systemctl enable vnstat >/dev/null 2>&1
 echo -e "${C_GREEN}[3/7] 🎨 Generating panel...${C_RESET}"
 
 cat << EOF > /root/lin-panel-en.sh
-#!/bin/sh
+#!/bin/bash
 C_CYAN='\\033[1;36m'
 C_YELLOW='\\033[1;33m'
 C_GREEN='\\033[1;32m'
@@ -337,17 +337,17 @@ show_speed() {
     echo -e "\${C_CYAN}  ──────────────────────────────────────────────────────────\${C_RESET}"
     IFACE=\$(ip route 2>/dev/null | awk '/default/{print \$5; exit}')
     if [ -z "\$IFACE" ]; then
-        IFACE=\$(awk 'NR>2{gsub(/:/,\" \"); if(\$1!=\"lo\"){print \$1; exit}}' /proc/net/dev)
+        IFACE=\$(awk -F: 'NR>2{n=\\\$1; gsub(/ /,\"\",n); if(n!=\"lo\"){print n; exit}}' /proc/net/dev)
     fi
     [ -z "\$IFACE" ] && IFACE="eth0"
     if [ -f /proc/net/dev ]; then
-        R1=\$(awk -v iface="\$IFACE" 'index(\$0, iface\":\")==1 || \$0~\" \"iface\":\"{gsub(/:/,\" \"); print \\\$2}' /proc/net/dev)
-        T1=\$(awk -v iface="\$IFACE" 'index(\$0, iface\":\")==1 || \$0~\" \"iface\":\"{gsub(/:/,\" \"); print \\\$10}' /proc/net/dev)
+        R1=\$(awk -v iface="\$IFACE" '{split(\\\$0,a,/[: ]+/); if(a[1]==iface) print a[2]}' /proc/net/dev)
+        T1=\$(awk -v iface="\$IFACE" '{split(\\\$0,a,/[: ]+/); if(a[1]==iface) print a[10]}' /proc/net/dev)
         [ -z "\$R1" ] && R1=0; [ -z "\$T1" ] && T1=0
         echo -e "  \${C_WHITE}Sampling...\${C_RESET}"
         sleep 2
-        R2=\$(awk -v iface="\$IFACE" 'index(\$0, iface\":\")==1 || \$0~\" \"iface\":\"{gsub(/:/,\" \"); print \\\$2}' /proc/net/dev)
-        T2=\$(awk -v iface="\$IFACE" 'index(\$0, iface\":\")==1 || \$0~\" \"iface\":\"{gsub(/:/,\" \"); print \\\$10}' /proc/net/dev)
+        R2=\$(awk -v iface="\$IFACE" '{split(\\\$0,a,/[: ]+/); if(a[1]==iface) print a[2]}' /proc/net/dev)
+        T2=\$(awk -v iface="\$IFACE" '{split(\\\$0,a,/[: ]+/); if(a[1]==iface) print a[10]}' /proc/net/dev)
         [ -z "\$R2" ] && R2=0; [ -z "\$T2" ] && T2=0
         DL=\$(( (R2 - R1) / 1024 / 2 ))
         UL=\$(( (T2 - T1) / 1024 / 2 ))
@@ -361,7 +361,7 @@ show_speed() {
 
 do_uninstall() {
     echo ""
-    echo -e "\${C_RED}  ⚠️  Uninstall LIN-Panel and all related files\${C_RESET}"
+    echo -e "\${C_RED}  ⚠️  Uninstall LIN-Panel and all files\${C_RESET}"
     printf "  Confirm uninstall？[y/N]: "
     read CONFIRM
     if [ "\$CONFIRM" != "y" ] && [ "\$CONFIRM" != "Y" ]; then
@@ -372,7 +372,7 @@ do_uninstall() {
     echo -e "  \${C_WHITE}Cleaning up...\${C_RESET}"
     rm -f /root/lin-panel-en.sh /root/lin-panel-en.sh
     echo -e "  ✅ Panel scripts removed"
-    rm -f /root/traffic_reset.sh /root/traffic_check.sh
+    rm -f /root/traffic_reset.sh /root/traffic_reset_check.sh /root/traffic_check.sh
     echo -e "  ✅ Reset/push scripts removed"
     rm -f /root/traffic_history.log
     echo -e "  ✅ Traffic logs removed"
@@ -433,20 +433,45 @@ chmod +x /root/lin-panel-en.sh
 
 echo -e "${C_GREEN}[4/7] 🔄 Auto-reset script...${C_RESET}"
 
-cat << 'EOF' > /root/traffic_reset.sh
+cat << RESEOF > /root/traffic_reset_check.sh
 #!/bin/sh
+RESET_DAY=${DAY}
+RESET_HOUR=${HOUR}
+RESET_MIN=${MINUTE}
+RESET_SEC=${SECOND}
+
+TODAY=\$(date +%d)
+MONTH=\$(date +%m)
+YEAR=\$(date +%Y)
+
+MAX_DAY=31
+case \$MONTH in 02) MAX_DAY=28;; 04|06|09|11) MAX_DAY=30;; esac
+if [ \$((YEAR % 4)) -eq 0 ] && [ "\$MONTH" = "02" ]; then MAX_DAY=29; fi
+
+TARGET_DAY=\$RESET_DAY
+[ "\$TARGET_DAY" -gt "\$MAX_DAY" ] && TARGET_DAY=\$MAX_DAY
+
+if [ "\$TODAY" -ne "\$TARGET_DAY" ]; then
+    exit 0
+fi
+
+NOW_S=\$(date +%s)
+TARGET_S=\$(( \$(date -d "\$YEAR-\$MONTH-\$TARGET_DAY 00:00:00" +%s 2>/dev/null || echo \$NOW_S) + RESET_HOUR * 3600 + RESET_MIN * 60 + RESET_SEC ))
+SLEEP=\$(( TARGET_S - NOW_S ))
+[ "\$SLEEP" -gt 0 ] && sleep "\$SLEEP"
+
 systemctl stop vnstat
 rm -rf /var/lib/vnstat/*
 systemctl start vnstat
-EOF
-chmod +x /root/traffic_reset.sh
+RESEOF
+chmod +x /root/traffic_reset_check.sh
 
 echo -e "${C_GREEN}[5/7] 📊 Daily logging...${C_RESET}"
 
 EXISTING_CRON=$(crontab -l 2>/dev/null || true)
 
 CRON_TREND='59 23 * * * echo "$(date +%Y-%m-%d) $(vnstat -m | awk '\''/total/{print $NF}'\'')" >> /root/traffic_history.log && tail -30 /root/traffic_history.log > /tmp/.tl && mv /tmp/.tl /root/traffic_history.log'
-CRON_RESET="${MINUTE} ${HOUR} ${DAY} * * sleep ${SECOND} && /root/traffic_reset.sh"
+CRON_RESET="0 0 * * * /root/traffic_reset_check.sh"
 
 EXISTING_CRON=$(echo "$EXISTING_CRON" | grep -v 'traffic_history\.log')
 
@@ -454,7 +479,7 @@ NEW_ENTRIES=""
 if ! echo "$EXISTING_CRON" | grep -qF 'traffic_history.log'; then
     NEW_ENTRIES="${NEW_ENTRIES}${CRON_TREND}\n"
 fi
-if ! echo "$EXISTING_CRON" | grep -qF 'traffic_reset.sh'; then
+if ! echo "$EXISTING_CRON" | grep -qF 'traffic_reset_check.sh'; then
     NEW_ENTRIES="${NEW_ENTRIES}${CRON_RESET}\n"
 fi
 
@@ -573,15 +598,16 @@ echo -e "  -> Command created: ${C_YELLOW}${CMD}${C_RESET}"
 
 echo ""
 echo -e "${C_CYAN}╭──────────────────────────────────────────────────────────────╮${C_RESET}"
-echo -e "${C_GREEN}│                    🎉 Done!                             │${C_RESET}"
+echo -e "${C_GREEN}│                    🎉 Installation Complete!                             │${C_RESET}"
 echo -e "${C_CYAN}╰──────────────────────────────────────────────────────────────╯${C_RESET}"
+echo ""
+echo -e "${C_WHITE}  Command: ${C_YELLOW}${CMD}${C_WHITE} (always available)${C_RESET}"
 if [ "$ENABLE_LOGIN_AUTO" = "1" ]; then
-    echo -e "${C_WHITE}Reconnect SSH or run ${C_YELLOW}source /root/.profile${C_WHITE} to see panel!${C_RESET}"
-else
-    echo -e "${C_WHITE}Open panel: ${C_YELLOW}${CMD}${C_RESET}"
+    echo -e "${C_WHITE}  Auto-start: ${C_GREEN}ON${C_WHITE} (下次 SSH 登录自动展示)${C_RESET}"
 fi
-echo -e "${C_WHITE}Command: ${C_YELLOW}${CMD}${C_WHITE} (always available)${C_RESET}"
-echo -e "${C_CYAN}────────────────────────────────────────────────────────────────${C_RESET}"
+echo ""
+echo -e "${C_YELLOW}  ⏳ vnstat is collecting data, panel will show stats in a few minutes${C_RESET}"
+echo -e "${C_WHITE}  Run: ${C_YELLOW}${CMD}${C_RESET}"
 echo ""
 echo -e "${C_YELLOW}  ⭐ If this panel helps you, please give a Star!${C_RESET}"
 echo -e "${C_WHITE}  🔗 https://github.com/linjunhao024-byte/Lin-Panel${C_RESET}"
