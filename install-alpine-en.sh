@@ -601,6 +601,67 @@ TGEOF
     fi
     echo -e "  -> Telegram enabled: ${C_YELLOW}${TG_LABEL}${C_RESET}"
     echo -e "  -> Bot: ${C_YELLOW}$(echo "$TG_TOKEN" | cut -c1-10)...${C_RESET}  Chat: ${C_YELLOW}${TG_CHAT}${C_RESET}"
+    echo ""
+    echo -e "  ${C_WHITE}Test push scheduled in 10 minutes (waiting for vnstat data)...${C_RESET}"
+    echo -e "  ${C_WHITE}Test message will be sent once to verify push functionality.${C_RESET}"
+    cat << TESTEOF > /root/traffic_test.sh
+#!/bin/sh
+sleep 600
+LIMIT=${LIMIT}
+BILLING_MODE=${BILLING_MODE}
+BASELINE=${BASELINE}
+TG_TOKEN="${TG_TOKEN}"
+TG_CHAT="${TG_CHAT}"
+
+VSTAT_RAW=\$(vnstat -m 2>/dev/null)
+TRAFFIC_BYTES=0
+if [ -n "\$VSTAT_RAW" ]; then
+    UNIT=\$(echo "\$VSTAT_RAW" | awk '/GiB|TiB|MiB/{print \$3; exit}')
+    TRAFFIC_RAW=""
+    if [ "\$BILLING_MODE" = "2" ]; then
+        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$3} END{print v}')
+    elif [ "\$BILLING_MODE" = "3" ]; then
+        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$4} END{print v}')
+    else
+        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]+\.[0-9]+/{last=\$NF} END{print last}')
+    fi
+    if [ -n "\$TRAFFIC_RAW" ] && [ -n "\$UNIT" ]; then
+        case "\$UNIT" in
+            *TiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1099511627776}") ;;
+            *GiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1073741824}") ;;
+            *MiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1048576}") ;;
+        esac
+    fi
+fi
+BASELINE_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$BASELINE * 1073741824}")
+TRAFFIC_BYTES=\$(( TRAFFIC_BYTES + BASELINE_BYTES ))
+LIMIT_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$LIMIT * 1073741824}")
+[ "\$LIMIT_BYTES" -le 0 ] && exit 0
+PCT=\$(awk "BEGIN{printf \\"%.1f\\", \$TRAFFIC_BYTES * 100 / \$LIMIT_BYTES}")
+USED_GB=\$(awk "BEGIN{printf \\"%.2f\\", \$TRAFFIC_BYTES / 1073741824}")
+
+ICON="✅"
+awk "BEGIN{exit !(\$PCT >= 90)}" && ICON="🚨"
+awk "BEGIN{exit !(\$PCT >= 70)}" && ICON="⚠️"
+
+MSG="📊 Push Test Message
+━━━━━━━━━━━━━━━━
+This is a test message to verify push functionality.
+\${ICON} Used: \${USED_GB} / \${LIMIT} GB (\${PCT}%)
+📈 Billing: \${BILLING_MODE}
+━━━━━━━━━━━━━━━━
+If you received this, push is working correctly!
+Official reports will follow your schedule (${TG_LABEL})."
+
+curl -s -X POST "https://api.telegram.org/bot\${TG_TOKEN}/sendMessage" \\
+    -d chat_id="\${TG_CHAT}" \\
+    -d text="\${MSG}" \\
+    -d parse_mode="HTML" >/dev/null 2>&1
+rm -f /root/traffic_test.sh
+TESTEOF
+    chmod +x /root/traffic_test.sh
+    nohup /root/traffic_test.sh >/dev/null 2>&1 &
+    echo -e "  ${C_GREEN}✅ Test push scheduled, check Telegram in 10 minutes${C_RESET}"
     fi
 else
     echo -e "  -> Telegram skipped"
