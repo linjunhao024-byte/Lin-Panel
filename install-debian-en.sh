@@ -15,7 +15,7 @@ echo '  / /  / / /    /  ______ / /_/ / __ `/ __ \/ _ \/ /'
 echo ' / /__/ / / /|  / /_____// ____/ /_/ / / / /  __/ /'
 echo '/____/___/_/ |_/        /_/    \__,_/_/ /_/\___/_/'
 echo -e "${C_RESET}"
-echo -e "${C_YELLOW}           Minimalist Traffic Panel · v1.0.0${C_RESET}"
+echo -e "${C_YELLOW}           Minimalist Traffic Panel · v1.0.1${C_RESET}"
 echo ""
 echo -e "${C_CYAN}╭──────────────────────────────────────────────────────────────╮${C_RESET}"
 echo -e "${C_YELLOW}│              Welcome to LIN-PANEL Installer                       │${C_RESET}"
