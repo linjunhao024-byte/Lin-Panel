@@ -11,6 +11,8 @@
 **如果这个项目对你有帮助，请给一个 ⭐ Star！**
 
 ![Stars](https://img.shields.io/github/stars/linjunhao024-byte/Lin-Panel?style=social)
+![Forks](https://img.shields.io/github/forks/linjunhao024-byte/Lin-Panel?style=social)
+![Issues](https://img.shields.io/github/issues/linjunhao024-byte/Lin-Panel?style=social)
 
 # 📊 LIN-Panel
 
@@ -25,7 +27,9 @@
 ![Alpine](https://img.shields.io/badge/Alpine%20Linux-0A1628?style=for-the-badge&logo=alpinelinux&logoColor=white)
 ![Debian](https://img.shields.io/badge/Debian-A81D33?style=for-the-badge&logo=debian&logoColor=white)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-FF6B6B?style=for-the-badge)
+![License](https://img.shields.io/github/license/linjunhao024-byte/Lin-Panel?style=for-the-badge)
+![vnstat](https://img.shields.io/badge/vnstat-依赖-2E86C1?style=for-the-badge)
+![bash](https://img.shields.io/badge/bash-脚本-4EAA25?style=for-the-badge&logo=gnubash&logoColor=white)
 
 </div>
 
