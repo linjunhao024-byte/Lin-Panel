@@ -393,7 +393,7 @@ do_uninstall() {
     echo -e "\${C_GREEN}  🎉 卸载完成！\${C_RESET}"
     echo ""
     echo -e "\${C_WHITE}  如果有不满意的地方，欢迎提交反馈：\${C_RESET}"
-    echo -e "\${C_YELLOW}  🔗 https://github.com/linjunhao024-byte/alpine-vnstat-panel/issues\${C_RESET}"
+    echo -e "\${C_YELLOW}  🔗 https://github.com/linjunhao024-byte/Lin-Panel/issues\${C_RESET}"
     echo -e "\${C_CYAN}  ──────────────────────────────────────────────\${C_RESET}"
     echo ""
     exit 0
@@ -584,5 +584,5 @@ echo -e "${C_WHITE}快捷命令: ${C_YELLOW}${CMD}${C_WHITE} (随时可用)${C_R
 echo -e "${C_CYAN}────────────────────────────────────────────────────────────────${C_RESET}"
 echo ""
 echo -e "${C_YELLOW}  ⭐ 如果这个面板对你有帮助，请给个 Star 支持一下！${C_RESET}"
-echo -e "${C_WHITE}  🔗 https://github.com/linjunhao024-byte/alpine-vnstat-panel${C_RESET}"
+echo -e "${C_WHITE}  🔗 https://github.com/linjunhao024-byte/Lin-Panel${C_RESET}"
 echo ""

@@ -393,7 +393,7 @@ do_uninstall() {
     echo -e "\${C_GREEN}  🎉 Uninstall complete!\${C_RESET}"
     echo ""
     echo -e "\${C_WHITE}  Feedback welcome at:\${C_RESET}"
-    echo -e "\${C_YELLOW}  🔗 https://github.com/linjunhao024-byte/alpine-vnstat-panel/issues\${C_RESET}"
+    echo -e "\${C_YELLOW}  🔗 https://github.com/linjunhao024-byte/Lin-Panel/issues\${C_RESET}"
     echo -e "\${C_CYAN}  ──────────────────────────────────────────────\${C_RESET}"
     echo ""
     exit 0
@@ -584,5 +584,5 @@ echo -e "${C_WHITE}Command: ${C_YELLOW}${CMD}${C_WHITE} (always available)${C_RE
 echo -e "${C_CYAN}────────────────────────────────────────────────────────────────${C_RESET}"
 echo ""
 echo -e "${C_YELLOW}  ⭐ If this panel helps you, please give a Star!${C_RESET}"
-echo -e "${C_WHITE}  🔗 https://github.com/linjunhao024-byte/alpine-vnstat-panel${C_RESET}"
+echo -e "${C_WHITE}  🔗 https://github.com/linjunhao024-byte/Lin-Panel${C_RESET}"
 echo ""
