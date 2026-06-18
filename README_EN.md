@@ -149,7 +149,7 @@ Choose the install script for your system:
 ### Alpine Linux
 
 ```bash
-wget -O install.sh https://raw.githubusercontent.com/linjunhao024-byte/Lin-Panel/main/install.sh && chmod +x install.sh && ./install.sh
+wget -O install-alpine.sh https://raw.githubusercontent.com/linjunhao024-byte/Lin-Panel/main/install.sh && chmod +x install-alpine.sh chmod +x install-alpine.sh chmod +x install.sh && ./install.shchmod +x install.sh && ./install.sh ./install-alpine.shchmod +x install-alpine.sh chmod +x install.sh && ./install.shchmod +x install.sh && ./install.sh ./install-alpine.sh ./install-alpine.sh
 ```
 
 ### Debian
@@ -185,7 +185,7 @@ wget -O install-ubuntu-en.sh https://raw.githubusercontent.com/linjunhao024-byte
 git clone https://github.com/linjunhao024-byte/Lin-Panel.git
 cd Lin-Panel
 # Choose your system:
-chmod +x install.sh && ./install.sh                # Alpine
+chmod +x install-alpine.sh chmod +x install-alpine.sh chmod +x install.sh && ./install.shchmod +x install.sh && ./install.sh ./install-alpine.shchmod +x install-alpine.sh chmod +x install.sh && ./install.shchmod +x install.sh && ./install.sh ./install-alpine.sh ./install-alpine.sh                # Alpine
 chmod +x install-debian.sh && ./install-debian.sh  # Debian
 chmod +x install-ubuntu.sh && ./install-ubuntu.sh  # Ubuntu
 ```
