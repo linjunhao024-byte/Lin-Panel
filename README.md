@@ -1,12 +1,6 @@
 <div align="center">
 
-```text
-    __  ____ _  __          ____                   __
-   / / /  // |/ /         / __ \____ _____  ___  / /
-  / /  / / /    /  ______ / /_/ / __ `/ __ \/ _ \/ /
- / /__/ / / /|  / /_____// ____/ /_/ / / / /  __/ /
-/____/___/_/ |_/        /_/    \__,_/_/ /_/\___/_/
-```
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:000000,100:0b0f0b&height=220&section=header&text=LIN-Panel&fontSize=50&fontColor=00FF41&fontAlignY=35&desc=Lightweight%20Terminal%20Dashboard%20Core&descSize=15&descColor=00FF41&descAlignY=55&animation=twinkling" width="100%"/>
 
 **如果这个项目对你有帮助，请给一个 ⭐ Star！**
 
