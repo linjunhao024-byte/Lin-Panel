@@ -15,7 +15,7 @@ echo '  / /  / / /    /  ______ / /_/ / __ `/ __ \/ _ \/ /'
 echo ' / /__/ / / /|  / /_____// ____/ /_/ / / / /  __/ /'
 echo '/____/___/_/ |_/        /_/    \__,_/_/ /_/\___/_/'
 echo -e "${C_RESET}"
-echo -e "${C_YELLOW}           Minimalist Traffic Panel · v1.0.1${C_RESET}"
+echo -e "${C_YELLOW}           Minimalist Traffic Panel · v1.0.3${C_RESET}"
 echo ""
 echo -e "${C_CYAN}╭──────────────────────────────────────────────────────────────╮${C_RESET}"
 echo -e "${C_YELLOW}│              Welcome to LIN-PANEL Installer                       │${C_RESET}"
@@ -332,10 +332,10 @@ show_speed() {
         sleep 2
         R2=\$(cat /sys/class/net/\$IFACE/statistics/rx_bytes 2>/dev/null || echo 0)
         T2=\$(cat /sys/class/net/\$IFACE/statistics/tx_bytes 2>/dev/null || echo 0)
-        DL=\$(( (R2 - R1) / 1024 / 2 ))
-        UL=\$(( (T2 - T1) / 1024 / 2 ))
-        echo -e "  ⬇️  DL: \${C_GREEN}\${DL} KB/s\${C_RESET}"
-        echo -e "  ⬆️  UL: \${C_YELLOW}\${UL} KB/s\${C_RESET}"
+        DL=\$(awk "BEGIN{d=(\$R2-\$R1)/2; if(d>=1073741824) printf \"\\\033[1;31m%.2f GB/s\\\033[0m\", d/1073741824; else if(d>=1048576) printf \"\\\033[1;33m%.2f MB/s\\\033[0m\", d/1048576; else printf \"\\\033[1;32m%.0f KB/s\\\033[0m\", d/1024}")
+        UL=\$(awk "BEGIN{d=(\$T2-\$T1)/2; if(d>=1073741824) printf \"\\\033[1;31m%.2f GB/s\\\033[0m\", d/1073741824; else if(d>=1048576) printf \"\\\033[1;33m%.2f MB/s\\\033[0m\", d/1048576; else printf \"\\\033[1;32m%.0f KB/s\\\033[0m\", d/1024}")
+        echo -e "  ⬇  DL: \${DL}"
+        echo -e "  ⬆  UL: \${UL}"
     else
         echo -e "  \${C_RED}Cannot read NIC \${IFACE} speed data\${C_RESET}"
     fi
@@ -532,14 +532,43 @@ if [ "$TG_ENABLE" = "Y" ] || [ "$TG_ENABLE" = "y" ]; then
     printf "    [3] Monthly\n"
     printf "  Select [1/2/3] [default: 1]: "
     read TG_FREQ
-   
-    PUSH_DAY=$((DAY - 1))
-    [ "$PUSH_DAY" -lt 1 ] && PUSH_DAY=28
-    case "$TG_FREQ" in
-        2) TG_CRON="0 12 * * 1" ; TG_LABEL="Monday 12:00" ;;
-        3) TG_CRON="0 12 ${PUSH_DAY} * *" ; TG_LABEL="Day ${PUSH_DAY} 12:00 (12h before reset)" ;;
-        *) TG_CRON="0 9 * * *" ; TG_LABEL="Daily 09:00" ;;
-    esac
+
+    if [ "$TG_FREQ" = "1" ]; then
+        printf "  Select daily push time (0-23) [default: 9]: "
+        read TG_HOUR
+        TG_HOUR="${TG_HOUR:-9}"
+        case "$TG_HOUR" in [0-9]|1[0-9]|2[0-3]) ;; *) echo -e "  ${C_RED}⚠ Hour invalid, default 9${C_RESET}"; TG_HOUR=9 ;; esac
+        TG_CRON="0 ${TG_HOUR} * * *"
+        TG_LABEL="Daily ${TG_HOUR}:00"
+    elif [ "$TG_FREQ" = "2" ]; then
+        printf "  Select weekly push day:\n"
+        printf "    [1] Mon  [2] Tue  [3] Wed  [4] Thu\n"
+        printf "    [5] Fri  [6] Sat  [7] Sun\n"
+        printf "  Select [1-7] [default: 1]: "
+        read TG_WEEKDAY
+        case "$TG_WEEKDAY" in
+            2) TG_WEEKDAY=2 ;;
+            3) TG_WEEKDAY=3 ;;
+            4) TG_WEEKDAY=4 ;;
+            5) TG_WEEKDAY=5 ;;
+            6) TG_WEEKDAY=6 ;;
+            7) TG_WEEKDAY=0 ;;
+            *) TG_WEEKDAY=1 ;;
+        esac
+        printf "  Select push time (0-23) [default: 12]: "
+        read TG_HOUR
+        TG_HOUR="${TG_HOUR:-12}"
+        case "$TG_HOUR" in [0-9]|1[0-9]|2[0-3]) ;; *) echo -e "  ${C_RED}⚠ Hour invalid, default 12${C_RESET}"; TG_HOUR=12 ;; esac
+        WEEKDAY_LABEL="Sun"
+        case "$TG_WEEKDAY" in 1) WEEKDAY_LABEL="Mon";; 2) WEEKDAY_LABEL="Tue";; 3) WEEKDAY_LABEL="Wed";; 4) WEEKDAY_LABEL="Thu";; 5) WEEKDAY_LABEL="Fri";; 6) WEEKDAY_LABEL="Sat";; 0) WEEKDAY_LABEL="Sun";; esac
+        TG_CRON="0 ${TG_HOUR} * * ${TG_WEEKDAY}"
+        TG_LABEL="${WEEKDAY_LABEL} ${TG_HOUR}:00"
+    else
+        PUSH_DAY=$((DAY - 1))
+        [ "$PUSH_DAY" -lt 1 ] && PUSH_DAY=28
+        TG_CRON="0 12 ${PUSH_DAY} * *"
+        TG_LABEL="Day ${PUSH_DAY} 12:00 (12h before reset)"
+    fi
 
     cat << TGEOF > /root/traffic_check.sh
 #!/bin/sh

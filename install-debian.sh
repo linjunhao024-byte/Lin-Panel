@@ -15,7 +15,7 @@ echo '  / /  / / /    /  ______ / /_/ / __ `/ __ \/ _ \/ /'
 echo ' / /__/ / / /|  / /_____// ____/ /_/ / / / /  __/ /'
 echo '/____/___/_/ |_/        /_/    \__,_/_/ /_/\___/_/'
 echo -e "${C_RESET}"
-echo -e "${C_YELLOW}           极简流量监控伪面板 · v1.0.1${C_RESET}"
+echo -e "${C_YELLOW}           极简流量监控伪面板 · v1.0.3${C_RESET}"
 echo ""
 echo -e "${C_CYAN}╭──────────────────────────────────────────────────────────────╮${C_RESET}"
 echo -e "${C_YELLOW}│              欢迎使用 LIN-PANEL 一键安装脚本                       │${C_RESET}"
@@ -348,10 +348,10 @@ show_speed() {
         sleep 2
         R2=\$(cat /sys/class/net/\$IFACE/statistics/rx_bytes 2>/dev/null || echo 0)
         T2=\$(cat /sys/class/net/\$IFACE/statistics/tx_bytes 2>/dev/null || echo 0)
-        DL=\$(( (R2 - R1) / 1024 / 2 ))
-        UL=\$(( (T2 - T1) / 1024 / 2 ))
-        echo -e "  ⬇️  下载: \${C_GREEN}\${DL} KB/s\${C_RESET}"
-        echo -e "  ⬆️  上传: \${C_YELLOW}\${UL} KB/s\${C_RESET}"
+        DL=\$(awk "BEGIN{d=(\$R2-\$R1)/2; if(d>=1073741824) printf \"\\\033[1;31m%.2f GB/s\\\033[0m\", d/1073741824; else if(d>=1048576) printf \"\\\033[1;33m%.2f MB/s\\\033[0m\", d/1048576; else printf \"\\\033[1;32m%.0f KB/s\\\033[0m\", d/1024}")
+        UL=\$(awk "BEGIN{d=(\$T2-\$T1)/2; if(d>=1073741824) printf \"\\\033[1;31m%.2f GB/s\\\033[0m\", d/1073741824; else if(d>=1048576) printf \"\\\033[1;33m%.2f MB/s\\\033[0m\", d/1048576; else printf \"\\\033[1;32m%.0f KB/s\\\033[0m\", d/1024}")
+        echo -e "  ⬇  下载: \${DL}"
+        echo -e "  ⬆  上传: \${UL}"
     else
         echo -e "  \${C_RED}无法读取网卡 \${IFACE} 的流速数据\${C_RESET}"
     fi
@@ -548,14 +548,43 @@ if [ "$TG_ENABLE" = "Y" ] || [ "$TG_ENABLE" = "y" ]; then
     printf "    [3] 每月汇报\n"
     printf "  请选择 [1/2/3] [默认: 1]: "
     read TG_FREQ
-   
-    PUSH_DAY=$((DAY - 1))
-    [ "$PUSH_DAY" -lt 1 ] && PUSH_DAY=28
-    case "$TG_FREQ" in
-        2) TG_CRON="0 12 * * 1" ; TG_LABEL="每周一 12:00" ;;
-        3) TG_CRON="0 12 ${PUSH_DAY} * *" ; TG_LABEL="每月${PUSH_DAY}日 12:00 (重置前12小时)" ;;
-        *) TG_CRON="0 9 * * *" ; TG_LABEL="每日 09:00" ;;
-    esac
+
+    if [ "$TG_FREQ" = "1" ]; then
+        printf "  请选择每日推送时间 (0-23) [默认: 9]: "
+        read TG_HOUR
+        TG_HOUR="${TG_HOUR:-9}"
+        case "$TG_HOUR" in [0-9]|1[0-9]|2[0-3]) ;; *) echo -e "  ${C_RED}⚠ 小时无效，已使用默认值 9${C_RESET}"; TG_HOUR=9 ;; esac
+        TG_CRON="0 ${TG_HOUR} * * *"
+        TG_LABEL="每日 ${TG_HOUR}:00"
+    elif [ "$TG_FREQ" = "2" ]; then
+        printf "  请选择每周推送时间:\n"
+        printf "    [1] 周一  [2] 周二  [3] 周三  [4] 周四\n"
+        printf "    [5] 周五  [6] 周六  [7] 周日\n"
+        printf "  请选择 [1-7] [默认: 1]: "
+        read TG_WEEKDAY
+        case "$TG_WEEKDAY" in
+            2) TG_WEEKDAY=2 ;;
+            3) TG_WEEKDAY=3 ;;
+            4) TG_WEEKDAY=4 ;;
+            5) TG_WEEKDAY=5 ;;
+            6) TG_WEEKDAY=6 ;;
+            7) TG_WEEKDAY=0 ;;
+            *) TG_WEEKDAY=1 ;;
+        esac
+        printf "  请选择推送时间 (0-23) [默认: 12]: "
+        read TG_HOUR
+        TG_HOUR="${TG_HOUR:-12}"
+        case "$TG_HOUR" in [0-9]|1[0-9]|2[0-3]) ;; *) echo -e "  ${C_RED}⚠ 小时无效，已使用默认值 12${C_RESET}"; TG_HOUR=12 ;; esac
+        WEEKDAY_LABEL="周日"
+        case "$TG_WEEKDAY" in 1) WEEKDAY_LABEL="周一";; 2) WEEKDAY_LABEL="周二";; 3) WEEKDAY_LABEL="周三";; 4) WEEKDAY_LABEL="周四";; 5) WEEKDAY_LABEL="周五";; 6) WEEKDAY_LABEL="周六";; 0) WEEKDAY_LABEL="周日";; esac
+        TG_CRON="0 ${TG_HOUR} * * ${TG_WEEKDAY}"
+        TG_LABEL="每${WEEKDAY_LABEL} ${TG_HOUR}:00"
+    else
+        PUSH_DAY=$((DAY - 1))
+        [ "$PUSH_DAY" -lt 1 ] && PUSH_DAY=28
+        TG_CRON="0 12 ${PUSH_DAY} * *"
+        TG_LABEL="每月${PUSH_DAY}日 12:00 (重置前12小时)"
+    fi
 
     cat << TGEOF > /root/traffic_check.sh
 #!/bin/bash

@@ -12,7 +12,7 @@
 
 # 📊 LIN-Panel
 
-**Minimalist Traffic Monitor Pseudo-Panel · v1.0.1**
+**Minimalist Traffic Monitor Pseudo-Panel · v1.0.3**
 
 > No ports · No daemons · No web frameworks · Everything runs inside SSH
 
