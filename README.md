@@ -229,6 +229,9 @@ lin-panel              # 或你自定义的命令名
 /usr/local/bin/
 └── lin-panel → /root/lin-panel.sh
 
+~/.bashrc:
+└── LIN-PANEL-AUTO-START      # SSH 登录自启（交互式检测 + SCP 保护）
+
 Crontab:
 ├── 59 23 * * *        每日记录 + 裁剪
 ├── 0 0 * * *          每日检查是否重置日
@@ -242,7 +245,7 @@ Crontab:
 ```
      ┌─────────────────────────────────────────────┐
      │              SSH Login                       │
-     │    .profile → /root/lin-panel.sh             │
+     │    .bashrc → /root/lin-panel.sh              │
      └────────────────────┬────────────────────────┘
                           │
               ┌───────────▼───────────┐
@@ -294,7 +297,7 @@ vnstat 需要几分钟收集数据。等待或手动触发：`vnstat -u`
 ```bash
 rm -f /root/lin-panel.sh /root/traffic_reset_check.sh /root/traffic_check.sh /root/traffic_history.log
 rm -f /usr/local/bin/lin-panel      # 或你自定义的命令名
-sed -i '/lin-panel/d' /root/.profile
+sed -i '/LIN-PANEL-AUTO-START/,/END LIN-PANEL-AUTO-START/d' /root/.bashrc
 crontab -e  # 删除相关条目
 ```
 
@@ -303,7 +306,7 @@ crontab -e  # 删除相关条目
 <details>
 <summary><strong>Q: 重复安装会怎样？</strong></summary>
 
-安全。幂等设计：`.profile` 检查已存在则跳过，Cron 条目去重，命令 `ln -sf` 自动覆盖。
+安全。幂等设计：`.bashrc` 检查已存在则跳过，Cron 条目去重，命令 `ln -sf` 自动覆盖。
 
 </details>
 

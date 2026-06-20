@@ -227,6 +227,9 @@ lin-panel              # or your custom name
 /usr/local/bin/
 └── lin-panel → /root/lin-panel.sh
 
+~/.bashrc:
+└── LIN-PANEL-AUTO-START      # SSH login auto-start (interactive check + SCP protection)
+
 Crontab:
 ├── 59 23 * * *        Daily record + trim
 ├── 0 0 * * *          Daily reset check
@@ -240,7 +243,7 @@ Crontab:
 ```
      ┌─────────────────────────────────────────────┐
      │              SSH Login                       │
-     │    .profile → /root/lin-panel.sh             │
+     │    .bashrc → /root/lin-panel.sh              │
      └────────────────────┬────────────────────────┘
                           │
               ┌───────────▼───────────┐
@@ -293,7 +296,7 @@ Use menu `[6] Uninstall`, or manually:
 ```bash
 rm -f /root/lin-panel.sh /root/traffic_reset_check.sh /root/traffic_check.sh /root/traffic_history.log
 rm -f /usr/local/bin/lin-panel      # or your custom command name
-sed -i '/lin-panel/d' /root/.profile
+sed -i '/LIN-PANEL-AUTO-START/,/END LIN-PANEL-AUTO-START/d' /root/.bashrc
 crontab -e  # remove related entries
 ```
 
@@ -302,7 +305,7 @@ crontab -e  # remove related entries
 <details>
 <summary><strong>Q: Re-install safe?</strong></summary>
 
-Yes. Idempotent design: `.profile` checks before append, Cron deduplicates, `ln -sf` auto-overwrites.
+Yes. Idempotent design: `.bashrc` checks before append, Cron deduplicates, `ln -sf` auto-overwrites.
 
 </details>
 

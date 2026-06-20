@@ -151,7 +151,7 @@ fi
 
 echo -e "${C_GREEN}[2/7] 📦 正在安装必要依赖 (vnstat)...${C_RESET}"
 
-apk update && apk add vnstat jq >/dev/null 2>&1
+apk update && apk add bash vnstat jq >/dev/null 2>&1
 rc-service vnstatd start >/dev/null 2>&1
 rc-update add vnstatd default >/dev/null 2>&1
 
@@ -439,10 +439,11 @@ do_uninstall() {
     echo "\$CLEANED" | sed '/^$/d' | crontab - 2>/dev/null
     echo -e "  ✅ 定时任务已清理"
    
-    if [ -f /root/.profile ]; then
-        sed -i '/lin-panel/d' /root/.profile
+    if [ -f /root/.bashrc ]; then
+        sed -i '/LIN-PANEL-AUTO-START/,/END LIN-PANEL-AUTO-START/d' /root/.bashrc
         echo -e "  ✅ 登录自启已移除"
     fi
+    sed -i '/lin-panel/d' /root/.profile 2>/dev/null
     echo ""
     printf "  是否同时卸载 vnstat（流量统计工具）？[y/N] [默认: N]: "
     read RM_VNSTAT
@@ -789,18 +790,39 @@ fi
 echo -e "${C_GREEN}[7/7] 🔐 正在配置登录自启与快捷命令...${C_RESET}"
 
 if [ "$ENABLE_LOGIN_AUTO" = "1" ]; then
-    if grep -q 'lin-panel.sh' /root/.profile 2>/dev/null; then
-        echo -e "  -> /root/.profile 中已存在面板配置，跳过写入。"
+    PANEL_MARKER="# LIN-PANEL-AUTO-START"
+    if grep -q 'LIN-PANEL-AUTO-START' /root/.bashrc 2>/dev/null; then
+        echo -e "  -> /root/.bashrc 中已存在面板配置，跳过写入。"
     else
-        echo "/root/lin-panel.sh" >> /root/.profile
-        echo -e "  -> 已追加到 /root/.profile，SSH 登录时将自动展示面板。"
+        cat >> /root/.bashrc << 'AUTOSTART'
+
+# LIN-PANEL-AUTO-START
+case "$-" in
+    *i*)
+        case "$SSH_CONNECTION" in
+            *"",*) [ -z "$SCP_OR_SFTP" ] && /root/lin-panel.sh ;;
+        esac
+        ;;
+esac
+# END LIN-PANEL-AUTO-START
+AUTOSTART
+        echo -e "  -> 已追加到 /root/.bashrc，SSH 登录时将自动展示面板。"
+    fi
+    # 清理旧版 .profile 中的残留
+    if grep -q 'lin-panel.sh' /root/.profile 2>/dev/null; then
+        sed -i '/lin-panel.sh/d' /root/.profile
+        echo -e "  -> 已清理 /root/.profile 中的旧配置。"
     fi
 else
     echo -e "  -> 已跳过登录自启配置。"
 fi
 
 ln -sf /root/lin-panel.sh /usr/local/bin/"$CMD"
-echo -e "  -> 快捷命令已创建: ${C_YELLOW}${CMD}${C_RESET}"
+if [ -L "/usr/local/bin/$CMD" ] && [ -x "/usr/local/bin/$CMD" ]; then
+    echo -e "  -> 快捷命令已创建: ${C_YELLOW}${CMD}${C_RESET}"
+else
+    echo -e "  ${C_RED}⚠ 快捷命令创建失败，请手动执行: ln -sf /root/lin-panel.sh /usr/local/bin/${CMD}${C_RESET}"
+fi
 
 echo ""
 echo -e "${C_CYAN}╭──────────────────────────────────────────────────────────────╮${C_RESET}"

@@ -85,7 +85,7 @@ echo ""
 printf "Enter command name [default: lin-panel]: "
 read CMD
 CMD="${CMD:-lin-panel}"
-case "$CMD" in */*|*\ *|*[;&|`$!(){}]*|*\\**) echo -e "  ${C_RED}⚠ Command name cannot contain /, spaces, or shell metacharacters, using default lin-panel${C_RESET}"; CMD="lin-panel" ;;
+case "$CMD" in */*|*\ *|*[;\&\|\`\$\<\>\(\)]*) echo -e "  ${C_RED}⚠ Command name contains illegal characters, using default lin-panel${C_RESET}"; CMD="lin-panel" ;;
 esac
 echo -e "  -> Command: ${C_YELLOW}${CMD}${C_RESET}"
 echo ""
@@ -405,7 +405,7 @@ do_uninstall() {
     fi
     echo ""
     echo -e "  \${C_WHITE}Cleaning up...\${C_RESET}"
-    rm -f /root/lin-panel-en.sh /root/lin-panel-en.sh
+    rm -f /root/lin-panel.sh /root/lin-panel-en.sh
     echo -e "  ✅ Panel scripts removed"
     rm -f /root/traffic_reset.sh /root/traffic_reset_check.sh /root/traffic_check.sh
     echo -e "  ✅ Reset/push scripts removed"
@@ -419,10 +419,11 @@ do_uninstall() {
     echo "\$CLEANED" | sed '/^$/d' | crontab - 2>/dev/null
     echo -e "  ✅ Cron tasks cleaned"
    
-    if [ -f /root/.profile ]; then
-        sed -i '/lin-panel/d' /root/.profile
+    if [ -f /root/.bashrc ]; then
+        sed -i '/LIN-PANEL-AUTO-START/,/END LIN-PANEL-AUTO-START/d' /root/.bashrc
         echo -e "  ✅ Login auto-start removed"
     fi
+    sed -i '/lin-panel/d' /root/.profile 2>/dev/null
     echo ""
     printf "  Also uninstall vnstat (traffic tool)? [y/N] [default: N]: "
     read RM_VNSTAT
@@ -489,15 +490,14 @@ RESET_HOUR=${HOUR}
 RESET_MIN=${MINUTE}
 RESET_SEC=${SECOND}
 
-TODAY=\$(date +%d)
-MONTH=\$(date +%m)
+TODAY=\$(date +%-d)
+MONTH=\$(date +%-m)
 YEAR=\$(date +%Y)
-NOW_S=\$(date +%s)
 
 MAX_DAY=31
-case \$MONTH in 02) MAX_DAY=28;; 04|06|09|11) MAX_DAY=30;; esac
-if [ \$((YEAR % 4)) -eq 0 ] && { [ \$((YEAR % 100)) -ne 0 ] || [ \$((YEAR % 400)) -eq 0 ]; } && [ "\$MONTH" = "02" ]; then
-    MAX_DAY=29
+case \$MONTH in 2) MAX_DAY=28;; 4|6|9|11) MAX_DAY=30;; esac
+if { [ \$((YEAR % 4)) -eq 0 ] && [ \$((YEAR % 100)) -ne 0 ]; } || [ \$((YEAR % 400)) -eq 0 ]; then
+    [ "\$MONTH" -eq 2 ] && MAX_DAY=29
 fi
 
 TARGET_DAY=\$RESET_DAY
@@ -507,14 +507,18 @@ if [ "\$TODAY" -ne "\$TARGET_DAY" ]; then
     exit 0
 fi
 
-TARGET_S=\$(date -d "\$YEAR-\$MONTH-\$TARGET_DAY \${RESET_HOUR}:\${RESET_MIN}:\${RESET_SEC}" +%s 2>/dev/null)
-if [ -z "\$TARGET_S" ]; then
-    exit 0
-fi
-
-if [ "\$NOW_S" -lt "\$TARGET_S" ]; then
-    exit 0
-fi
+LEAP=0
+if { [ \$((YEAR % 4)) -eq 0 ] && [ \$((YEAR % 100)) -ne 0 ]; } || [ \$((YEAR % 400)) -eq 0 ]; then LEAP=1; fi
+DOY=0
+for m in 1 2 3 4 5 6 7 8 9 10 11; do
+    [ \$m -ge \$MONTH ] && break
+    case \$m in 1|3|5|7|8|10) DOY=\$((DOY+31));; 4|6|9|11) DOY=\$((DOY+30));; 2) DOY=\$((DOY+28+LEAP));; esac
+done
+DOY=\$((DOY + TARGET_DAY))
+NOW_S=\$(date +%s)
+TARGET_S=\$(( (YEAR - 1970) * 31536000 + ((YEAR - 1969) / 4) * 86400 - ((YEAR - 1901) / 100) * 86400 + ((YEAR - 1601) / 400) * 86400 + (DOY - 1) * 86400 + RESET_HOUR * 3600 + RESET_MIN * 60 + RESET_SEC ))
+SLEEP=\$(( TARGET_S - NOW_S ))
+[ "\$SLEEP" -gt 0 ] && sleep "\$SLEEP"
 
 systemctl stop vnstat
 rm -rf /var/lib/vnstat/*
@@ -764,18 +768,39 @@ fi
 echo -e "${C_GREEN}[7/7] 🔐 Login config...${C_RESET}"
 
 if [ "$ENABLE_LOGIN_AUTO" = "1" ]; then
-    if grep -q 'lin-panel-en.sh' /root/.profile 2>/dev/null; then
-        echo -e "  -> /root/.profile already configured, skip."
+    PANEL_MARKER="# LIN-PANEL-AUTO-START"
+    if grep -q 'LIN-PANEL-AUTO-START' /root/.bashrc 2>/dev/null; then
+        echo -e "  -> /root/.bashrc already configured, skip."
     else
-        echo "/root/lin-panel-en.sh" >> /root/.profile
-        echo -e "  -> Added to /root/.profile, panel will auto-show on SSH login."
+        cat >> /root/.bashrc << 'AUTOSTART'
+
+# LIN-PANEL-AUTO-START
+case "$-" in
+    *i*)
+        case "$SSH_CONNECTION" in
+            *"",*) [ -z "$SCP_OR_SFTP" ] && /root/lin-panel-en.sh ;;
+        esac
+        ;;
+esac
+# END LIN-PANEL-AUTO-START
+AUTOSTART
+        echo -e "  -> Added to /root/.bashrc, panel will auto-show on SSH login."
+    fi
+    # Clean up old .profile entry
+    if grep -q 'lin-panel-en.sh' /root/.profile 2>/dev/null; then
+        sed -i '/lin-panel-en.sh/d' /root/.profile
+        echo -e "  -> Cleaned old config from /root/.profile."
     fi
 else
     echo -e "  -> Auto-start disabled."
 fi
 
 ln -sf /root/lin-panel-en.sh /usr/local/bin/"$CMD"
-echo -e "  -> Command created: ${C_YELLOW}${CMD}${C_RESET}"
+if [ -L "/usr/local/bin/$CMD" ] && [ -x "/usr/local/bin/$CMD" ]; then
+    echo -e "  -> Command created: ${C_YELLOW}${CMD}${C_RESET}"
+else
+    echo -e "  ${C_RED}⚠ Command creation failed. Run manually: ln -sf /root/lin-panel-en.sh /usr/local/bin/${CMD}${C_RESET}"
+fi
 
 echo ""
 echo -e "${C_CYAN}╭──────────────────────────────────────────────────────────────╮${C_RESET}"
