@@ -433,7 +433,7 @@ do_uninstall() {
     echo -e "  \${C_WHITE}Cleaning up...\${C_RESET}"
     rm -f /root/lin-panel.sh /root/lin-panel-en.sh
     echo -e "  ✅ Panel scripts removed"
-    rm -f /root/traffic_reset.sh /root/traffic_reset_check.sh /root/traffic_check.sh
+    rm -f /root/traffic_reset.sh /root/traffic_reset_check.sh /root/traffic_check.sh /root/traffic_spike_check.sh
     echo -e "  ✅ Reset/push scripts removed"
     rm -f /root/traffic_history.log
     echo -e "  ✅ Traffic logs removed"
@@ -441,7 +441,7 @@ do_uninstall() {
     echo -e "  ✅ Command shortcut removed"
    
     EXISTING=\$(crontab -l 2>/dev/null || true)
-    CLEANED=\$(echo "\$EXISTING" | grep -v 'traffic_history\|traffic_reset\|traffic_check')
+    CLEANED=\$(echo "\$EXISTING" | grep -v 'traffic_history\|traffic_reset\|traffic_check\|traffic_spike')
     echo "\$CLEANED" | sed '/^$/d' | crontab - 2>/dev/null
     echo -e "  ✅ Cron tasks cleaned"
    

@@ -455,7 +455,7 @@ do_uninstall() {
     echo -e "  \${C_WHITE}正在清理...\${C_RESET}"
     rm -f /root/lin-panel.sh /root/lin-panel-en.sh
     echo -e "  ✅ 面板脚本已删除"
-    rm -f /root/traffic_reset.sh /root/traffic_reset_check.sh /root/traffic_check.sh
+    rm -f /root/traffic_reset.sh /root/traffic_reset_check.sh /root/traffic_check.sh /root/traffic_spike_check.sh
     echo -e "  ✅ 重置/推送脚本已删除"
     rm -f /root/traffic_history.log
     echo -e "  ✅ 流量日志已删除"
@@ -463,7 +463,7 @@ do_uninstall() {
     echo -e "  ✅ 快捷命令已删除"
    
     EXISTING=\$(crontab -l 2>/dev/null || true)
-    CLEANED=\$(echo "\$EXISTING" | grep -v 'traffic_history\|traffic_reset\|traffic_check')
+    CLEANED=\$(echo "\$EXISTING" | grep -v 'traffic_history\|traffic_reset\|traffic_check\|traffic_spike')
     echo "\$CLEANED" | sed '/^$/d' | crontab - 2>/dev/null
     echo -e "  ✅ 定时任务已清理"
    
