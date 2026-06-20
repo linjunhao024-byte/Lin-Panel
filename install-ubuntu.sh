@@ -845,7 +845,6 @@ SPIKE_LIMIT=${SPIKE_LIMIT}
 TG_TOKEN="${TG_TOKEN:-}"
 TG_CHAT="${TG_CHAT:-}"
 [ "\$SPIKE_LIMIT" = "0" ] && exit 0
-[ -z "\$TG_TOKEN" ] || [ -z "\$TG_CHAT" ] && exit 0
 MAIN_INTERFACE=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE="eth0"
@@ -855,7 +854,7 @@ RX=\$(cat "\$STAT_PATH/rx_bytes" 2>/dev/null || echo 0)
 TX=\$(cat "\$STAT_PATH/tx_bytes" 2>/dev/null || echo 0)
 NOW_TOTAL=\$(( RX + TX ))
 LAST_FILE="/tmp/.lin_last_traffic"
-if [ -f "\$LAST_FILE" ]; then
+if [ -f "\$LAST_FILE" ] && [ -n "\$TG_TOKEN" ] && [ -n "\$TG_CHAT" ]; then
     LAST_TOTAL=\$(cat "\$LAST_FILE")
     if [ "\$NOW_TOTAL" -gt "\$LAST_TOTAL" ] 2>/dev/null; then
         DELTA_BYTES=\$(( NOW_TOTAL - LAST_TOTAL ))
