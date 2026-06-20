@@ -85,7 +85,7 @@ echo ""
 printf "Enter command name [default: lin-panel]: "
 read CMD
 CMD="${CMD:-lin-panel}"
-case "$CMD" in */*|*\ *) echo -e "  ${C_RED}⚠ Command name cannot contain / or spaces, using default lin-panel${C_RESET}"; CMD="lin-panel" ;;
+case "$CMD" in */*|*\ *|*[;\&\|\`$\<\>\(\)]*) echo -e "  ${C_RED}⚠ Command name cannot contain /, spaces, or special characters (;&|\`$<>()), using default lin-panel${C_RESET}"; CMD="lin-panel" ;;
 esac
 echo -e "  -> Command: ${C_YELLOW}${CMD}${C_RESET}"
 echo ""
@@ -151,7 +151,7 @@ fi
 
 echo -e "${C_GREEN}[2/7] 📦 Installing deps (vnstat)...${C_RESET}"
 
-apt-get update -qq && apt-get install -y vnstat >/dev/null 2>&1
+apt-get update -qq && apt-get install -y vnstat jq >/dev/null 2>&1
 systemctl start vnstat >/dev/null 2>&1
 systemctl enable vnstat >/dev/null 2>&1
 
@@ -183,35 +183,30 @@ MAIN_INTERFACE=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE="eth0"
 
-VSTAT_RAW=\$(vnstat -m -i "\$MAIN_INTERFACE" 2>/dev/null)
+VSTAT_JSON=\$(vnstat -m -i "\$MAIN_INTERFACE" --json 2>/dev/null)
 TRAFFIC_BYTES=0
-if [ -n "\$VSTAT_RAW" ]; then
-    UNIT=\$(echo "\$VSTAT_RAW" | awk '/GiB|TiB|MiB/{print \$3; exit}')
-    TRAFFIC_RAW=""
+if [ -n "\$VSTAT_JSON" ]; then
+    RX=\$(echo "\$VSTAT_JSON" | grep -o '"rx":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    TX=\$(echo "\$VSTAT_JSON" | grep -o '"tx":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    TOTAL=\$(echo "\$VSTAT_JSON" | grep -o '"total":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    RX=\${RX:-0}; TX=\${TX:-0}; TOTAL=\${TOTAL:-0}
     if [ "\$BILLING_MODE" = "2" ]; then
         BILLING_LABEL="Inbound"
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$3} END{print v}')
+        TRAFFIC_BYTES=\$RX
     elif [ "\$BILLING_MODE" = "3" ]; then
         BILLING_LABEL="Outbound"
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$4} END{print v}')
+        TRAFFIC_BYTES=\$TX
     else
-        BILLING_LABEL="Bidirectional"
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]+\\.[0-9]+/{last=\\\$NF} END{print last}')
-    fi
-    if [ -n "\$TRAFFIC_RAW" ] && [ -n "\$UNIT" ]; then
-        case "\$UNIT" in
-            *TiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1099511627776}") ;;
-            *GiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1073741824}") ;;
-            *MiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1048576}") ;;
-        esac
+        BILLING_LABEL="Both"
+        TRAFFIC_BYTES=\$TOTAL
     fi
 fi
-BASELINE_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$BASELINE * 1073741824}")
+BASELINE_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$BASELINE * 1073741824}")
 TRAFFIC_BYTES=\$(( TRAFFIC_BYTES + BASELINE_BYTES ))
-LIMIT_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$LIMIT * 1073741824}")
-if [ "\$LIMIT_BYTES" -gt 0 ] && [ "\$TRAFFIC_BYTES" -gt 0 ]; then
-    PCT=\$(awk "BEGIN{printf \\"%.1f\\", \$TRAFFIC_BYTES * 100 / \$LIMIT_BYTES}")
-    USED_GB=\$(awk "BEGIN{printf \\"%.2f\\", \$TRAFFIC_BYTES / 1073741824}")
+LIMIT_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$LIMIT * 1073741824}")
+if [ "\$LIMIT_BYTES" -gt 0 ] 2>/dev/null && [ "\$TRAFFIC_BYTES" -gt 0 ] 2>/dev/null; then
+    PCT=\$(awk "BEGIN{printf \"%.1f\", \$TRAFFIC_BYTES * 100 / \$LIMIT_BYTES}")
+    USED_GB=\$(awk "BEGIN{printf \"%.2f\", \$TRAFFIC_BYTES / 1073741824}")
     if awk "BEGIN{exit !(\$PCT >= 90)}"; then
         ALERT="red"
     elif awk "BEGIN{exit !(\$PCT >= 70)}"; then
@@ -416,7 +411,7 @@ do_uninstall() {
     echo -e "  ✅ Reset/push scripts removed"
     rm -f /root/traffic_history.log
     echo -e "  ✅ Traffic logs removed"
-    rm -f /usr/local/bin/lin-panel
+    rm -f /usr/local/bin/"${CMD}"
     echo -e "  ✅ Command shortcut removed"
    
     EXISTING=\$(crontab -l 2>/dev/null || true)
@@ -494,13 +489,15 @@ RESET_HOUR=${HOUR}
 RESET_MIN=${MINUTE}
 RESET_SEC=${SECOND}
 
-TODAY=\$(date +%d)
-MONTH=\$(date +%m)
+TODAY=\$(date +%-d)
+MONTH=\$(date +%-m)
 YEAR=\$(date +%Y)
 
 MAX_DAY=31
-case \$MONTH in 02) MAX_DAY=28;; 04|06|09|11) MAX_DAY=30;; esac
-if [ \$((YEAR % 4)) -eq 0 ] && [ "\$MONTH" = "02" ]; then MAX_DAY=29; fi
+case \$MONTH in 2) MAX_DAY=28;; 4|6|9|11) MAX_DAY=30;; esac
+if { [ \$((YEAR % 4)) -eq 0 ] && [ \$((YEAR % 100)) -ne 0 ]; } || [ \$((YEAR % 400)) -eq 0 ]; then
+    [ "\$MONTH" -eq 2 ] && MAX_DAY=29
+fi
 
 TARGET_DAY=\$RESET_DAY
 [ "\$TARGET_DAY" -gt "\$MAX_DAY" ] && TARGET_DAY=\$MAX_DAY
@@ -509,8 +506,16 @@ if [ "\$TODAY" -ne "\$TARGET_DAY" ]; then
     exit 0
 fi
 
+LEAP=0
+if { [ \$((YEAR % 4)) -eq 0 ] && [ \$((YEAR % 100)) -ne 0 ]; } || [ \$((YEAR % 400)) -eq 0 ]; then LEAP=1; fi
+DOY=0
+for m in 1 2 3 4 5 6 7 8 9 10 11; do
+    [ \$m -ge \$MONTH ] && break
+    case \$m in 1|3|5|7|8|10) DOY=\$((DOY+31));; 4|6|9|11) DOY=\$((DOY+30));; 2) DOY=\$((DOY+28+LEAP));; esac
+done
+DOY=\$((DOY + TARGET_DAY))
 NOW_S=\$(date +%s)
-TARGET_S=\$(( \$(date -d "\$YEAR-\$MONTH-\$TARGET_DAY 00:00:00" +%s 2>/dev/null || echo \$NOW_S) + RESET_HOUR * 3600 + RESET_MIN * 60 + RESET_SEC ))
+TARGET_S=\$(( (YEAR - 1970) * 31536000 + ((YEAR - 1969) / 4) * 86400 - ((YEAR - 1901) / 100) * 86400 + ((YEAR - 1601) / 400) * 86400 + (DOY - 1) * 86400 + RESET_HOUR * 3600 + RESET_MIN * 60 + RESET_SEC ))
 SLEEP=\$(( TARGET_S - NOW_S ))
 [ "\$SLEEP" -gt 0 ] && sleep "\$SLEEP"
 
@@ -641,32 +646,30 @@ MAIN_INTERFACE=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE="eth0"
 
-VSTAT_RAW=\$(vnstat -m -i "\$MAIN_INTERFACE" 2>/dev/null)
+VSTAT_JSON=\$(vnstat -m -i "\$MAIN_INTERFACE" --json 2>/dev/null)
 TRAFFIC_BYTES=0
-if [ -n "\$VSTAT_RAW" ]; then
-    UNIT=\$(echo "\$VSTAT_RAW" | awk '/GiB|TiB|MiB/{print \$3; exit}')
-    TRAFFIC_RAW=""
+if [ -n "\$VSTAT_JSON" ]; then
+    RX=\$(echo "\$VSTAT_JSON" | grep -o '"rx":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    TX=\$(echo "\$VSTAT_JSON" | grep -o '"tx":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    TOTAL=\$(echo "\$VSTAT_JSON" | grep -o '"total":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    RX=\${RX:-0}; TX=\${TX:-0}; TOTAL=\${TOTAL:-0}
     if [ "\$BILLING_MODE" = "2" ]; then
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$3} END{print v}')
+        BILLING_LABEL="Inbound"
+        TRAFFIC_BYTES=\$RX
     elif [ "\$BILLING_MODE" = "3" ]; then
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$4} END{print v}')
+        BILLING_LABEL="Outbound"
+        TRAFFIC_BYTES=\$TX
     else
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]+\.[0-9]+/{last=\$NF} END{print last}')
-    fi
-    if [ -n "\$TRAFFIC_RAW" ] && [ -n "\$UNIT" ]; then
-        case "\$UNIT" in
-            *TiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1099511627776}") ;;
-            *GiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1073741824}") ;;
-            *MiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1048576}") ;;
-        esac
+        BILLING_LABEL="Both"
+        TRAFFIC_BYTES=\$TOTAL
     fi
 fi
-BASELINE_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$BASELINE * 1073741824}")
+BASELINE_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$BASELINE * 1073741824}")
 TRAFFIC_BYTES=\$(( TRAFFIC_BYTES + BASELINE_BYTES ))
-LIMIT_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$LIMIT * 1073741824}")
-[ "\$LIMIT_BYTES" -le 0 ] && exit 0
-PCT=\$(awk "BEGIN{printf \\"%.1f\\", \$TRAFFIC_BYTES * 100 / \$LIMIT_BYTES}")
-USED_GB=\$(awk "BEGIN{printf \\"%.2f\\", \$TRAFFIC_BYTES / 1073741824}")
+LIMIT_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$LIMIT * 1073741824}")
+[ "\$LIMIT_BYTES" -le 0 ] 2>/dev/null && exit 0
+PCT=\$(awk "BEGIN{printf \"%.1f\", \$TRAFFIC_BYTES * 100 / \$LIMIT_BYTES}")
+USED_GB=\$(awk "BEGIN{printf \"%.2f\", \$TRAFFIC_BYTES / 1073741824}")
 
 ICON="✅"
 awk "BEGIN{exit !(\$PCT >= 90)}" && ICON="🚨"
@@ -675,7 +678,7 @@ awk "BEGIN{exit !(\$PCT >= 70)}" && ICON="⚠️"
 MSG="📊 LIN-Panel Traffic Report
 ━━━━━━━━━━━━━━━━
 \${ICON} Used: \${USED_GB} / \${LIMIT} GB (\${PCT}%)
-📈 Billing: \${BILLING_MODE}
+📈 Billing: \${BILLING_LABEL}
 ━━━━━━━━━━━━━━━━"
 
 curl -s -X POST "https://api.telegram.org/bot\${TG_TOKEN}/sendMessage" \\
@@ -709,32 +712,30 @@ MAIN_INTERFACE=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE="eth0"
 
-VSTAT_RAW=\$(vnstat -m -i "\$MAIN_INTERFACE" 2>/dev/null)
+VSTAT_JSON=\$(vnstat -m -i "\$MAIN_INTERFACE" --json 2>/dev/null)
 TRAFFIC_BYTES=0
-if [ -n "\$VSTAT_RAW" ]; then
-    UNIT=\$(echo "\$VSTAT_RAW" | awk '/GiB|TiB|MiB/{print \$3; exit}')
-    TRAFFIC_RAW=""
+if [ -n "\$VSTAT_JSON" ]; then
+    RX=\$(echo "\$VSTAT_JSON" | grep -o '"rx":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    TX=\$(echo "\$VSTAT_JSON" | grep -o '"tx":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    TOTAL=\$(echo "\$VSTAT_JSON" | grep -o '"total":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    RX=\${RX:-0}; TX=\${TX:-0}; TOTAL=\${TOTAL:-0}
     if [ "\$BILLING_MODE" = "2" ]; then
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$3} END{print v}')
+        BILLING_LABEL="Inbound"
+        TRAFFIC_BYTES=\$RX
     elif [ "\$BILLING_MODE" = "3" ]; then
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$4} END{print v}')
+        BILLING_LABEL="Outbound"
+        TRAFFIC_BYTES=\$TX
     else
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]+\.[0-9]+/{last=\$NF} END{print last}')
-    fi
-    if [ -n "\$TRAFFIC_RAW" ] && [ -n "\$UNIT" ]; then
-        case "\$UNIT" in
-            *TiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1099511627776}") ;;
-            *GiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1073741824}") ;;
-            *MiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1048576}") ;;
-        esac
+        BILLING_LABEL="Both"
+        TRAFFIC_BYTES=\$TOTAL
     fi
 fi
-BASELINE_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$BASELINE * 1073741824}")
+BASELINE_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$BASELINE * 1073741824}")
 TRAFFIC_BYTES=\$(( TRAFFIC_BYTES + BASELINE_BYTES ))
-LIMIT_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$LIMIT * 1073741824}")
-[ "\$LIMIT_BYTES" -le 0 ] && exit 0
-PCT=\$(awk "BEGIN{printf \\"%.1f\\", \$TRAFFIC_BYTES * 100 / \$LIMIT_BYTES}")
-USED_GB=\$(awk "BEGIN{printf \\"%.2f\\", \$TRAFFIC_BYTES / 1073741824}")
+LIMIT_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$LIMIT * 1073741824}")
+[ "\$LIMIT_BYTES" -le 0 ] 2>/dev/null && exit 0
+PCT=\$(awk "BEGIN{printf \"%.1f\", \$TRAFFIC_BYTES * 100 / \$LIMIT_BYTES}")
+USED_GB=\$(awk "BEGIN{printf \"%.2f\", \$TRAFFIC_BYTES / 1073741824}")
 
 ICON="✅"
 awk "BEGIN{exit !(\$PCT >= 90)}" && ICON="🚨"
@@ -744,7 +745,7 @@ MSG="📊 Push Test Message
 ━━━━━━━━━━━━━━━━
 This is a test message to verify push functionality.
 \${ICON} Used: \${USED_GB} / \${LIMIT} GB (\${PCT}%)
-📈 Billing: \${BILLING_MODE}
+📈 Billing: \${BILLING_LABEL}
 ━━━━━━━━━━━━━━━━
 If you received this, push is working correctly!
 Official reports will follow your schedule (${TG_LABEL})."
@@ -795,3 +796,8 @@ echo ""
 echo -e "${C_YELLOW}  ⭐ If this panel helps you, please give a Star!${C_RESET}"
 echo -e "${C_WHITE}  🔗 https://github.com/linjunhao024-byte/Lin-Panel${C_RESET}"
 echo ""
+printf "Enter panel now? [Y/n] [default: Y]: "
+read ENTER_PANEL
+if [ "$ENTER_PANEL" != "N" ] && [ "$ENTER_PANEL" != "n" ]; then
+    /root/lin-panel-en.sh
+fi

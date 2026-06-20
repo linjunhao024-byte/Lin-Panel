@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 C_CYAN='\033[1;36m'
 C_YELLOW='\033[1;33m'
@@ -85,7 +85,7 @@ echo ""
 printf "请输入您的快捷命令名称 [默认: lin-panel]: "
 read CMD
 CMD="${CMD:-lin-panel}"
-case "$CMD" in */*|*\ *) echo -e "  ${C_RED}⚠ 命令名不能包含 / 或空格，已使用默认值 lin-panel${C_RESET}"; CMD="lin-panel" ;;
+case "$CMD" in */*|*\ *|*[;\&\|\`\$\<\>\(\)]*) echo -e "  ${C_RED}⚠ 命令名包含非法字符，已使用默认值 lin-panel${C_RESET}"; CMD="lin-panel" ;;
 esac
 echo -e "  -> 快捷命令设置为: ${C_YELLOW}${CMD}${C_RESET}"
 echo ""
@@ -151,7 +151,7 @@ fi
 
 echo -e "${C_GREEN}[2/7] 📦 正在安装必要依赖 (vnstat)...${C_RESET}"
 
-apk update && apk add vnstat >/dev/null 2>&1
+apk update && apk add vnstat jq >/dev/null 2>&1
 rc-service vnstatd start >/dev/null 2>&1
 rc-update add vnstatd default >/dev/null 2>&1
 
@@ -183,35 +183,30 @@ MAIN_INTERFACE=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE="eth0"
 
-VSTAT_RAW=\$(vnstat -m -i "\$MAIN_INTERFACE" 2>/dev/null)
+VSTAT_JSON=\$(vnstat -m -i "\$MAIN_INTERFACE" --json 2>/dev/null)
 TRAFFIC_BYTES=0
-if [ -n "\$VSTAT_RAW" ]; then
-    UNIT=\$(echo "\$VSTAT_RAW" | awk '/GiB|TiB|MiB/{print \$3; exit}')
-    TRAFFIC_RAW=""
+if [ -n "\$VSTAT_JSON" ]; then
+    RX=\$(echo "\$VSTAT_JSON" | grep -o '"rx":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    TX=\$(echo "\$VSTAT_JSON" | grep -o '"tx":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    TOTAL=\$(echo "\$VSTAT_JSON" | grep -o '"total":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    RX=\${RX:-0}; TX=\${TX:-0}; TOTAL=\${TOTAL:-0}
     if [ "\$BILLING_MODE" = "2" ]; then
         BILLING_LABEL="入站计费"
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$3} END{print v}')
+        TRAFFIC_BYTES=\$RX
     elif [ "\$BILLING_MODE" = "3" ]; then
         BILLING_LABEL="出站计费"
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$4} END{print v}')
+        TRAFFIC_BYTES=\$TX
     else
         BILLING_LABEL="双向计费"
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]+\\.[0-9]+/{last=\\\$NF} END{print last}')
-    fi
-    if [ -n "\$TRAFFIC_RAW" ] && [ -n "\$UNIT" ]; then
-        case "\$UNIT" in
-            *TiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1099511627776}") ;;
-            *GiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1073741824}") ;;
-            *MiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1048576}") ;;
-        esac
+        TRAFFIC_BYTES=\$TOTAL
     fi
 fi
-BASELINE_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$BASELINE * 1073741824}")
+BASELINE_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$BASELINE * 1073741824}")
 TRAFFIC_BYTES=\$(( TRAFFIC_BYTES + BASELINE_BYTES ))
-LIMIT_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$LIMIT * 1073741824}")
-if [ "\$LIMIT_BYTES" -gt 0 ] && [ "\$TRAFFIC_BYTES" -gt 0 ]; then
-    PCT=\$(awk "BEGIN{printf \\"%.1f\\", \$TRAFFIC_BYTES * 100 / \$LIMIT_BYTES}")
-    USED_GB=\$(awk "BEGIN{printf \\"%.2f\\", \$TRAFFIC_BYTES / 1073741824}")
+LIMIT_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$LIMIT * 1073741824}")
+if [ "\$LIMIT_BYTES" -gt 0 ] 2>/dev/null && [ "\$TRAFFIC_BYTES" -gt 0 ] 2>/dev/null; then
+    PCT=\$(awk "BEGIN{printf \"%.1f\", \$TRAFFIC_BYTES * 100 / \$LIMIT_BYTES}")
+    USED_GB=\$(awk "BEGIN{printf \"%.2f\", \$TRAFFIC_BYTES / 1073741824}")
     if awk "BEGIN{exit !(\$PCT >= 90)}"; then
         ALERT="red"
     elif awk "BEGIN{exit !(\$PCT >= 70)}"; then
@@ -229,14 +224,18 @@ if [ "\$NEXT_M" -eq 0 ]; then NEXT_M=12; NEXT_Y=\$((NEXT_Y + 1)); fi
 MDAYS=31
 case \$NEXT_M in 2) MDAYS=28;; 4|6|9|11) MDAYS=30;; esac
 TDAY=\$RESET_DAY; [ "\$TDAY" -gt "\$MDAYS" ] && TDAY=\$MDAYS
-D2=\$(echo "\$TDAY" | sed 's/^0//')
-H2=\$(echo "\$RESET_HOUR" | sed 's/^0//')
-MI2=\$(echo "\$RESET_MIN" | sed 's/^0//')
-S2=\$(echo "\$RESET_SEC" | sed 's/^0//')
-RESET_STR=\$(printf "%04d-%02d-%02d %02d:%02d:%02d" "\$NEXT_Y" "\$NEXT_M" "\$D2" "\$H2" "\$MI2" "\$S2")
-NEXT_S=\$(date -d "\$RESET_STR" +%s 2>/dev/null)
+LEAP=0
+if [ \$((NEXT_Y % 4)) -eq 0 ] && [ \$((NEXT_Y % 100)) -ne 0 ] || [ \$((NEXT_Y % 400)) -eq 0 ]; then LEAP=1; fi
+[ "\$NEXT_M" -eq 2 ] && MDAYS=\$((28 + LEAP))
+TDAY=\$RESET_DAY; [ "\$TDAY" -gt "\$MDAYS" ] && TDAY=\$MDAYS
+DOY=0
+for _m in \$(seq 1 \$((NEXT_M - 1))); do
+    case \$_m in 1|3|5|7|8|10) DOY=\$((DOY+31));; 4|6|9|11) DOY=\$((DOY+30));; 2) DOY=\$((DOY+28+LEAP));; esac
+done
+DOY=\$((DOY + TDAY))
+NEXT_S=\$(( (NEXT_Y - 1970) * 31536000 + ((NEXT_Y - 1969) / 4) * 86400 - ((NEXT_Y - 1901) / 100) * 86400 + ((NEXT_Y - 1601) / 400) * 86400 + (DOY - 1) * 86400 + RESET_HOUR * 3600 + RESET_MIN * 60 + RESET_SEC ))
 CDOWN=""
-if [ -n "\$NEXT_S" ] && [ "\$NEXT_S" -gt "\$NOW_S" ]; then
+if [ "\$NEXT_S" -gt "\$NOW_S" ]; then
     DIFF=\$((\$NEXT_S - \$NOW_S))
     CD_D=\$((\$DIFF / 86400))
     CD_H=\$((\$DIFF % 86400 / 3600))
@@ -432,7 +431,7 @@ do_uninstall() {
     echo -e "  ✅ 重置/推送脚本已删除"
     rm -f /root/traffic_history.log
     echo -e "  ✅ 流量日志已删除"
-    rm -f /usr/local/bin/lin-panel
+    rm -f /usr/local/bin/"${CMD}"
     echo -e "  ✅ 快捷命令已删除"
    
     EXISTING=\$(crontab -l 2>/dev/null || true)
@@ -510,13 +509,15 @@ RESET_HOUR=${HOUR}
 RESET_MIN=${MINUTE}
 RESET_SEC=${SECOND}
 
-TODAY=\$(date +%d)
-MONTH=\$(date +%m)
+TODAY=\$(date +%-d)
+MONTH=\$(date +%-m)
 YEAR=\$(date +%Y)
 
 MAX_DAY=31
-case \$MONTH in 02) MAX_DAY=28;; 04|06|09|11) MAX_DAY=30;; esac
-if [ \$((YEAR % 4)) -eq 0 ] && [ "\$MONTH" = "02" ]; then MAX_DAY=29; fi
+case \$MONTH in 2) MAX_DAY=28;; 4|6|9|11) MAX_DAY=30;; esac
+if { [ \$((YEAR % 4)) -eq 0 ] && [ \$((YEAR % 100)) -ne 0 ]; } || [ \$((YEAR % 400)) -eq 0 ]; then
+    [ "\$MONTH" -eq 2 ] && MAX_DAY=29
+fi
 
 TARGET_DAY=\$RESET_DAY
 [ "\$TARGET_DAY" -gt "\$MAX_DAY" ] && TARGET_DAY=\$MAX_DAY
@@ -525,8 +526,16 @@ if [ "\$TODAY" -ne "\$TARGET_DAY" ]; then
     exit 0
 fi
 
+LEAP=0
+if { [ \$((YEAR % 4)) -eq 0 ] && [ \$((YEAR % 100)) -ne 0 ]; } || [ \$((YEAR % 400)) -eq 0 ]; then LEAP=1; fi
+DOY=0
+for m in 1 2 3 4 5 6 7 8 9 10 11; do
+    [ \$m -ge \$MONTH ] && break
+    case \$m in 1|3|5|7|8|10) DOY=\$((DOY+31));; 4|6|9|11) DOY=\$((DOY+30));; 2) DOY=\$((DOY+28+LEAP));; esac
+done
+DOY=\$((DOY + TARGET_DAY))
 NOW_S=\$(date +%s)
-TARGET_S=\$(( \$(date -d "\$YEAR-\$MONTH-\$TARGET_DAY 00:00:00" +%s 2>/dev/null || echo \$NOW_S) + RESET_HOUR * 3600 + RESET_MIN * 60 + RESET_SEC ))
+TARGET_S=\$(( (YEAR - 1970) * 31536000 + ((YEAR - 1969) / 4) * 86400 - ((YEAR - 1901) / 100) * 86400 + ((YEAR - 1601) / 400) * 86400 + (DOY - 1) * 86400 + RESET_HOUR * 3600 + RESET_MIN * 60 + RESET_SEC ))
 SLEEP=\$(( TARGET_S - NOW_S ))
 [ "\$SLEEP" -gt 0 ] && sleep "\$SLEEP"
 
@@ -657,32 +666,31 @@ MAIN_INTERFACE=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE="eth0"
 
-VSTAT_RAW=\$(vnstat -m -i "\$MAIN_INTERFACE" 2>/dev/null)
+VSTAT_JSON=\$(vnstat -m -i "\$MAIN_INTERFACE" --json 2>/dev/null)
 TRAFFIC_BYTES=0
-if [ -n "\$VSTAT_RAW" ]; then
-    UNIT=\$(echo "\$VSTAT_RAW" | awk '/GiB|TiB|MiB/{print \$3; exit}')
-    TRAFFIC_RAW=""
+if [ -n "\$VSTAT_JSON" ]; then
+    RX=\$(echo "\$VSTAT_JSON" | grep -o '"rx":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    TX=\$(echo "\$VSTAT_JSON" | grep -o '"tx":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    TOTAL=\$(echo "\$VSTAT_JSON" | grep -o '"total":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    RX=\${RX:-0}; TX=\${TX:-0}; TOTAL=\${TOTAL:-0}
     if [ "\$BILLING_MODE" = "2" ]; then
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$3} END{print v}')
+        BILLING_LABEL="入站计费"
+        TRAFFIC_BYTES=\$RX
     elif [ "\$BILLING_MODE" = "3" ]; then
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$4} END{print v}')
+        BILLING_LABEL="出站计费"
+        TRAFFIC_BYTES=\$TX
     else
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]+\.[0-9]+/{last=\$NF} END{print last}')
-    fi
-    if [ -n "\$TRAFFIC_RAW" ] && [ -n "\$UNIT" ]; then
-        case "\$UNIT" in
-            *TiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1099511627776}") ;;
-            *GiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1073741824}") ;;
-            *MiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1048576}") ;;
-        esac
+        BILLING_LABEL="双向计费"
+        TRAFFIC_BYTES=\$TOTAL
     fi
 fi
-BASELINE_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$BASELINE * 1073741824}")
+BASELINE_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$BASELINE * 1073741824}")
 TRAFFIC_BYTES=\$(( TRAFFIC_BYTES + BASELINE_BYTES ))
-LIMIT_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$LIMIT * 1073741824}")
-[ "\$LIMIT_BYTES" -le 0 ] && exit 0
-PCT=\$(awk "BEGIN{printf \\"%.1f\\", \$TRAFFIC_BYTES * 100 / \$LIMIT_BYTES}")
-USED_GB=\$(awk "BEGIN{printf \\"%.2f\\", \$TRAFFIC_BYTES / 1073741824}")
+LIMIT_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$LIMIT * 1073741824}")
+[ "\$LIMIT_BYTES" -le 0 ] 2>/dev/null && exit 0
+[ "\$TRAFFIC_BYTES" -le 0 ] 2>/dev/null && exit 0
+PCT=\$(awk "BEGIN{printf \"%.1f\", \$TRAFFIC_BYTES * 100 / \$LIMIT_BYTES}")
+USED_GB=\$(awk "BEGIN{printf \"%.2f\", \$TRAFFIC_BYTES / 1073741824}")
 
 ICON="✅"
 awk "BEGIN{exit !(\$PCT >= 90)}" && ICON="🚨"
@@ -691,7 +699,7 @@ awk "BEGIN{exit !(\$PCT >= 70)}" && ICON="⚠️"
 MSG="📊 LIN-Panel 流量报告
 ━━━━━━━━━━━━━━━━
 \${ICON} 已用: \${USED_GB} / \${LIMIT} GB (\${PCT}%)
-📈 计费模式: \${BILLING_MODE}
+📈 计费模式: \${BILLING_LABEL}
 ━━━━━━━━━━━━━━━━"
 
 curl -s -X POST "https://api.telegram.org/bot\${TG_TOKEN}/sendMessage" \\
@@ -725,32 +733,31 @@ MAIN_INTERFACE=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE="eth0"
 
-VSTAT_RAW=\$(vnstat -m -i "\$MAIN_INTERFACE" 2>/dev/null)
+VSTAT_JSON=\$(vnstat -m -i "\$MAIN_INTERFACE" --json 2>/dev/null)
 TRAFFIC_BYTES=0
-if [ -n "\$VSTAT_RAW" ]; then
-    UNIT=\$(echo "\$VSTAT_RAW" | awk '/GiB|TiB|MiB/{print \$3; exit}')
-    TRAFFIC_RAW=""
+if [ -n "\$VSTAT_JSON" ]; then
+    RX=\$(echo "\$VSTAT_JSON" | grep -o '"rx":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    TX=\$(echo "\$VSTAT_JSON" | grep -o '"tx":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    TOTAL=\$(echo "\$VSTAT_JSON" | grep -o '"total":[^,}]*' | tail -1 | grep -o '[0-9]*')
+    RX=\${RX:-0}; TX=\${TX:-0}; TOTAL=\${TOTAL:-0}
     if [ "\$BILLING_MODE" = "2" ]; then
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$3} END{print v}')
+        BILLING_LABEL="入站计费"
+        TRAFFIC_BYTES=\$RX
     elif [ "\$BILLING_MODE" = "3" ]; then
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]/{if(\$0~/[A-Z][a-z][a-z].*[0-9]/) v=\$4} END{print v}')
+        BILLING_LABEL="出站计费"
+        TRAFFIC_BYTES=\$TX
     else
-        TRAFFIC_RAW=\$(echo "\$VSTAT_RAW" | awk '/[0-9]+\.[0-9]+/{last=\$NF} END{print last}')
-    fi
-    if [ -n "\$TRAFFIC_RAW" ] && [ -n "\$UNIT" ]; then
-        case "\$UNIT" in
-            *TiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1099511627776}") ;;
-            *GiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1073741824}") ;;
-            *MiB*) TRAFFIC_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$TRAFFIC_RAW * 1048576}") ;;
-        esac
+        BILLING_LABEL="双向计费"
+        TRAFFIC_BYTES=\$TOTAL
     fi
 fi
-BASELINE_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$BASELINE * 1073741824}")
+BASELINE_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$BASELINE * 1073741824}")
 TRAFFIC_BYTES=\$(( TRAFFIC_BYTES + BASELINE_BYTES ))
-LIMIT_BYTES=\$(awk "BEGIN{printf \\"%.0f\\", \$LIMIT * 1073741824}")
-[ "\$LIMIT_BYTES" -le 0 ] && exit 0
-PCT=\$(awk "BEGIN{printf \\"%.1f\\", \$TRAFFIC_BYTES * 100 / \$LIMIT_BYTES}")
-USED_GB=\$(awk "BEGIN{printf \\"%.2f\\", \$TRAFFIC_BYTES / 1073741824}")
+LIMIT_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$LIMIT * 1073741824}")
+[ "\$LIMIT_BYTES" -le 0 ] 2>/dev/null && exit 0
+[ "\$TRAFFIC_BYTES" -le 0 ] 2>/dev/null && exit 0
+PCT=\$(awk "BEGIN{printf \"%.1f\", \$TRAFFIC_BYTES * 100 / \$LIMIT_BYTES}")
+USED_GB=\$(awk "BEGIN{printf \"%.2f\", \$TRAFFIC_BYTES / 1073741824}")
 
 ICON="✅"
 awk "BEGIN{exit !(\$PCT >= 90)}" && ICON="🚨"
@@ -760,7 +767,7 @@ MSG="📊 数据推送测试消息
 ━━━━━━━━━━━━━━━━
 这是一条测试消息，用于验证推送功能是否正常。
 \${ICON} 已用: \${USED_GB} / \${LIMIT} GB (\${PCT}%)
-📈 计费模式: \${BILLING_MODE}
+📈 计费模式: \${BILLING_LABEL}
 ━━━━━━━━━━━━━━━━
 如果您收到了这条消息，说明推送配置成功！
 正式推送将按照您设置的频率（${TG_LABEL}）进行。"
@@ -811,3 +818,8 @@ echo ""
 echo -e "${C_YELLOW}  ⭐ 如果这个面板对你有帮助，请给个 Star 支持一下！${C_RESET}"
 echo -e "${C_WHITE}  🔗 https://github.com/linjunhao024-byte/Lin-Panel${C_RESET}"
 echo ""
+printf "是否立即进入面板？[Y/n] [默认: Y]: "
+read ENTER_PANEL
+if [ "$ENTER_PANEL" != "N" ] && [ "$ENTER_PANEL" != "n" ]; then
+    /root/lin-panel.sh
+fi

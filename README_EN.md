@@ -19,7 +19,7 @@
 [![Issues](https://img.shields.io/github/issues/linjunhao024-byte/Lin-Panel?style=flat&logo=github&cacheSeconds=60)](https://github.com/linjunhao024-byte/Lin-Panel/issues)
 [![License](https://img.shields.io/github/license/linjunhao024-byte/Lin-Panel?style=flat&cacheSeconds=3600)](https://github.com/linjunhao024-byte/Lin-Panel/blob/main/LICENSE)
 [![Language](https://img.shields.io/badge/Language-Shell-007ACC?style=flat&logo=gnu-bash)](#)
-[![Dependencies](https://img.shields.io/badge/Dependencies-Zero-brightgreen?style=flat)](#)
+[![Dependencies](https://img.shields.io/badge/Dependencies-vnstat%20+%20jq-brightgreen?style=flat)](#)
 
 </div>
 
@@ -113,7 +113,7 @@ chmod +x install-ubuntu-en.sh && ./install-ubuntu-en.sh   # Ubuntu
 |------|-------------|
 | OS | Alpine / Debian / Ubuntu |
 | Privileges | root |
-| Dependencies | vnstat (auto-installed) |
+| Dependencies | vnstat + jq (auto-installed) |
 | Disk | < 5MB |
 | Memory | < 3MB |
 
@@ -131,18 +131,21 @@ Fully interactive, press Enter for defaults:
   ③ Reset time        [Day 1-31 + H:M:S]
   ④ Login auto-start  [Y/n]
   ⑤ Command name      [default: lin-panel]
+  ⑥ Traffic baseline  [already used, optional]
 
 └───────────────────────────────────────┘
 
 ┌──────────── Steps ────────────────────┐
 
   [1/7] 🌐 Timezone      9 timezones
-  [2/7] 📦 vnstat         Only dependency
+  [2/7] 📦 Dependencies  vnstat + jq
   [3/7] 🎨 Generate       Dynamic injection
   [4/7] 🔄 Reset          Smart month-end fallback
   [5/7] 📊 Cron           Idempotent append
   [6/7] 📱 Telegram       Test message verify
   [7/7] 🔐 Login config   Idempotent write
+
+  ✅ After install: prompt to enter panel
 
 └───────────────────────────────────────┘
 ```
@@ -168,7 +171,8 @@ lin-panel              # or your custom name
   │  [2] 7-Day Trend  │  ← Bar chart
   │  [3] Connections  │  ← Connection status
   │  [4] Speed Test   │  ← Measure speed
-  │  [5] Uninstall    │  ← Remove all files
+  │  [5] Push Now     │  ← Telegram push
+  │  [6] Uninstall    │  ← Remove all files
   │  [0] Exit         │  ← Back to shell
   └──────────────────┘
 ```
@@ -241,8 +245,7 @@ Crontab:
                           │
               ┌───────────▼───────────┐
               │     lin-panel.sh      │
-              │  bash (Debian/Ubuntu) │
-              │  sh (Alpine)          │
+              │  bash (all platforms)  │
               └───────────┬───────────┘
                           │
          ┌────────────────┼────────────────┐
@@ -285,11 +288,11 @@ Re-run the installer. All parameters reconfigure without affecting existing data
 <details>
 <summary><strong>Q: How to uninstall?</strong></summary>
 
-Use menu `[5] Uninstall`, or manually:
+Use menu `[6] Uninstall`, or manually:
 
 ```bash
 rm -f /root/lin-panel.sh /root/traffic_reset_check.sh /root/traffic_check.sh /root/traffic_history.log
-rm -f /usr/local/bin/lin-panel
+rm -f /usr/local/bin/lin-panel      # or your custom command name
 sed -i '/lin-panel/d' /root/.profile
 crontab -e  # remove related entries
 ```

@@ -19,7 +19,7 @@
 [![Issues](https://img.shields.io/github/issues/linjunhao024-byte/Lin-Panel?style=flat&logo=github&cacheSeconds=60)](https://github.com/linjunhao024-byte/Lin-Panel/issues)
 [![License](https://img.shields.io/github/license/linjunhao024-byte/Lin-Panel?style=flat&cacheSeconds=3600)](https://github.com/linjunhao024-byte/Lin-Panel/blob/main/LICENSE)
 [![Language](https://img.shields.io/badge/Language-Shell-007ACC?style=flat&logo=gnu-bash)](#)
-[![Dependencies](https://img.shields.io/badge/Dependencies-Zero-brightgreen?style=flat)](#)
+[![Dependencies](https://img.shields.io/badge/Dependencies-vnstat%20+%20jq-brightgreen?style=flat)](#)
 
 </div>
 
@@ -115,7 +115,7 @@ chmod +x install-ubuntu-en.sh && ./install-ubuntu-en.sh   # Ubuntu
 |------|------|
 | 系统 | Alpine / Debian / Ubuntu |
 | 权限 | root |
-| 依赖 | vnstat（脚本自动安装） |
+| 依赖 | vnstat + jq（脚本自动安装） |
 | 磁盘 | < 5MB |
 | 内存 | < 3MB |
 
@@ -133,18 +133,21 @@ chmod +x install-ubuntu-en.sh && ./install-ubuntu-en.sh   # Ubuntu
   ③ 重置时间        [日期 1-31 + 时分秒]
   ④ 登录自启        [Y/n]
   ⑤ 快捷命令名      [默认: lin-panel]
+  ⑥ 流量基线        [已用流量，可选]
 
 └────────────────────────────────────┘
 
 ┌──────────── 安装步骤 ────────────┐
 
   [1/7] 🌐 时区配置     9 个时区可选
-  [2/7] 📦 安装 vnstat   唯一硬依赖
+  [2/7] 📦 安装依赖     vnstat + jq
   [3/7] 🎨 生成面板      动态注入配置
   [4/7] 🔄 重置脚本      智能短月兜底
   [5/7] 📊 定时任务      幂等不覆盖
   [6/7] 📱 Telegram      测试消息验证
   [7/7] 🔐 登录配置      幂等写入
+
+  ✅ 安装完成后提问：是否立即进入面板
 
 └────────────────────────────────────┘
 ```
@@ -170,7 +173,8 @@ lin-panel              # 或你自定义的命令名
   │  [2] 近7天趋势    │  ← 查看柱状图
   │  [3] 连接概览     │  ← 查看连接状态
   │  [4] 实时流速     │  ← 测量当前速度
-  │  [5] 一键卸载     │  ← 清理所有文件
+  │  [5] 手动推送     │  ← Telegram 推送
+  │  [6] 一键卸载     │  ← 清理所有文件
   │  [0] 退出         │  ← 回到 Shell
   └──────────────────┘
 ```
@@ -243,8 +247,7 @@ Crontab:
                           │
               ┌───────────▼───────────┐
               │     lin-panel.sh      │
-              │   bash (Debian/Ubuntu)│
-              │   sh (Alpine)         │
+              │   bash (all platforms) │
               └───────────┬───────────┘
                           │
          ┌────────────────┼────────────────┐
@@ -286,11 +289,11 @@ vnstat 需要几分钟收集数据。等待或手动触发：`vnstat -u`
 <details>
 <summary><strong>Q: 如何卸载？</strong></summary>
 
-面板菜单选 `[5] 一键卸载`，或手动：
+面板菜单选 `[6] 一键卸载`，或手动：
 
 ```bash
 rm -f /root/lin-panel.sh /root/traffic_reset_check.sh /root/traffic_check.sh /root/traffic_history.log
-rm -f /usr/local/bin/lin-panel
+rm -f /usr/local/bin/lin-panel      # 或你自定义的命令名
 sed -i '/lin-panel/d' /root/.profile
 crontab -e  # 删除相关条目
 ```
