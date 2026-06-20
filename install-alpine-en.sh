@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 C_CYAN='\033[1;36m'
 C_YELLOW='\033[1;33m'
@@ -453,11 +453,10 @@ do_uninstall() {
     echo "\$CLEANED" | sed '/^$/d' | crontab - 2>/dev/null
     echo -e "  ✅ Cron tasks cleaned"
    
-    if [ -f /root/.bashrc ]; then
-        sed -i '/LIN-PANEL-AUTO-START/,/END LIN-PANEL-AUTO-START/d' /root/.bashrc
+    if [ -f /root/.profile ]; then
+        sed -i '/LIN-PANEL-AUTO-START/,/END LIN-PANEL-AUTO-START/d' /root/.profile
         echo -e "  ✅ Login auto-start removed"
     fi
-    sed -i '/lin-panel/d' /root/.profile 2>/dev/null
     echo ""
     printf "  Also uninstall vnstat (traffic tool)? [y/N] [default: N]: "
     read RM_VNSTAT
@@ -858,27 +857,22 @@ echo -e "${C_GREEN}[7/7] 🔐 Login config...${C_RESET}"
 
 if [ "$ENABLE_LOGIN_AUTO" = "1" ]; then
     PANEL_MARKER="# LIN-PANEL-AUTO-START"
-    if grep -q 'LIN-PANEL-AUTO-START' /root/.bashrc 2>/dev/null; then
-        echo -e "  -> /root/.bashrc already configured, skip."
+    if grep -q 'LIN-PANEL-AUTO-START' /root/.profile 2>/dev/null; then
+        echo -e "  -> /root/.profile already configured, skip."
     else
-        cat >> /root/.bashrc << 'AUTOSTART'
+        cat >> /root/.profile << 'AUTOSTART'
 
 # LIN-PANEL-AUTO-START
 case "$-" in
     *i*)
         case "$SSH_CONNECTION" in
-            *"",*) [ -z "$SCP_OR_SFTP" ] && /root/lin-panel-en.sh ;;
+            *" "*) [ -z "$SCP_OR_SFTP" ] && /root/lin-panel-en.sh ;;
         esac
         ;;
 esac
 # END LIN-PANEL-AUTO-START
 AUTOSTART
-        echo -e "  -> Added to /root/.bashrc, panel will auto-show on SSH login."
-    fi
-    # Clean up old .profile entry
-    if grep -q 'lin-panel-en.sh' /root/.profile 2>/dev/null; then
-        sed -i '/lin-panel-en.sh/d' /root/.profile
-        echo -e "  -> Cleaned old config from /root/.profile."
+        echo -e "  -> Added to /root/.profile, panel will auto-show on SSH login."
     fi
 else
     echo -e "  -> Auto-start disabled."
