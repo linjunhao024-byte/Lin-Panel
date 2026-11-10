@@ -1,4 +1,8 @@
 #!/bin/bash
+if [ "$(id -u)" -ne 0 ]; then
+    echo "请以 root 身份运行本脚本 / please run as root"
+    exit 1
+fi
 
 C_CYAN='\033[1;36m'
 C_YELLOW='\033[1;33m'
@@ -15,7 +19,7 @@ echo '  / /  / / /    /  ______ / /_/ / __ `/ __ \/ _ \/ /'
 echo ' / /__/ / / /|  / /_____// ____/ /_/ / / / /  __/ /'
 echo '/____/___/_/ |_/        /_/    \__,_/_/ /_/\___/_/'
 echo -e "${C_RESET}"
-echo -e "${C_YELLOW}           Minimalist Traffic Panel · v1.1.0${C_RESET}"
+echo -e "${C_YELLOW}           Minimalist Traffic Panel · v1.1.1${C_RESET}"
 echo ""
 echo -e "${C_CYAN}╭──────────────────────────────────────────────────────────────╮${C_RESET}"
 echo -e "${C_YELLOW}│              Welcome to LIN-PANEL Installer                       │${C_RESET}"
@@ -29,6 +33,7 @@ printf "Enter traffic limit (GB) [default: 350]: "
 read LIMIT
 LIMIT="${LIMIT:-350}"
 echo -e "  -> Traffic limit: ${C_YELLOW}${LIMIT}GB${C_RESET}"
+case "$LIMIT" in ''|*[!0-9.]*|*.*.*) echo -e "  ${C_RED}Traffic limit must be a number, falling back to 350${C_RESET}"; LIMIT=350 ;; esac
 echo ""
 
 printf "Select billing mode\n"
@@ -87,6 +92,13 @@ read CMD
 CMD="${CMD:-lin-panel}"
 case "$CMD" in */*|*\ *|*[\<\>\&\|\;\$\`\!]*) echo -e "  ${C_RED}⚠ Command name contains illegal characters, using default lin-panel${C_RESET}"; CMD="lin-panel" ;;
 esac
+case "$CMD" in
+    sh|bash|dash|ash|rm|cp|mv|ln|ls|cat|sed|awk|grep|curl|wget|ss|ip|top|ps|kill|su|sudo|apt|apt-get|apk|systemctl|service|rc-service|crontab|vnstat|python|python3|node|npm|docker|git|tar|clear|reboot|shutdown)
+        echo -e "  ${C_RED}Name collides with a system command, falling back to lin-panel${C_RESET}"; CMD="lin-panel" ;;
+esac
+if [ -e "/usr/local/bin/$CMD" ] && [ ! -L "/usr/local/bin/$CMD" ]; then
+    echo -e "  ${C_RED}/usr/local/bin/$CMD exists and is not this panel, falling back to lin-panel${C_RESET}"; CMD="lin-panel"
+fi
 echo -e "  -> Command: ${C_YELLOW}${CMD}${C_RESET}"
 echo ""
 
@@ -151,9 +163,14 @@ fi
 
 echo -e "${C_GREEN}[2/7] 📦 Installing deps (vnstat)...${C_RESET}"
 
-apt-get update -qq && apt-get install -y vnstat jq >/dev/null 2>&1
+apt-get update -qq && apt-get install -y vnstat jq curl >/dev/null 2>&1
 systemctl start vnstat >/dev/null 2>&1
 systemctl enable vnstat >/dev/null 2>&1
+if ! command -v vnstat >/dev/null 2>&1; then
+    echo -e "  ${C_RED}Failed to install vnstat. Aborting. Check package source / network.${C_RESET}"
+    exit 1
+fi
+mkdir -p /run/lin-panel 2>/dev/null && chmod 700 /run/lin-panel 2>/dev/null
 
 echo -e "${C_GREEN}[3/7] 🎨 Generating panel...${C_RESET}"
 
@@ -183,12 +200,12 @@ MAIN_INTERFACE=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE="eth0"
 
-VSTAT_JSON=\$(vnstat -m -i "\$MAIN_INTERFACE" --json 2>/dev/null)
+CUR_OL=\$(vnstat --oneline 1 -i "\$MAIN_INTERFACE" 2>/dev/null)
 TRAFFIC_BYTES=0
-if [ -n "\$VSTAT_JSON" ]; then
-    RX=\$(echo "\$VSTAT_JSON" | grep -o '"rx":[^,}]*' | tail -1 | grep -o '[0-9]*')
-    TX=\$(echo "\$VSTAT_JSON" | grep -o '"tx":[^,}]*' | tail -1 | grep -o '[0-9]*')
-    TOTAL=\$(echo "\$VSTAT_JSON" | grep -o '"total":[^,}]*' | tail -1 | grep -o '[0-9]*')
+if [ -n "\$CUR_OL" ]; then
+    RX=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$9}')
+    TX=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$10}')
+    TOTAL=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$11}')
     RX=\${RX:-0}; TX=\${TX:-0}; TOTAL=\${TOTAL:-0}
     if [ "\$BILLING_MODE" = "2" ]; then
         BILLING_LABEL="Inbound"
@@ -243,7 +260,7 @@ clear
 COLS=\$(tput cols 2>/dev/null || echo 80)
 UPTIME_STR=\$(uptime -p 2>/dev/null | sed 's/up //' || uptime 2>/dev/null | awk -F',' '{print \$1}' | awk '{\$1=""; print \$0}' | sed 's/^ //')
 LOAD_STR=\$(awk '{printf "%.2f", \$1}' /proc/loadavg 2>/dev/null || uptime 2>/dev/null | awk -F'load average:' '{print \$2}' | awk -F',' '{gsub(/^ /,"",\$1); print \$1}')
-LEFT=" 📊 LIN-PANEL v1.1.0 "
+LEFT=" 📊 LIN-PANEL v1.1.1 "
 RIGHT=" UP: \${UPTIME_STR} | Load: \${LOAD_STR} "
 LEFT_LEN=\${#LEFT}
 RIGHT_LEN=\${#RIGHT}
@@ -414,8 +431,9 @@ do_modify_spike() {
     fi
     printf "  Enter new threshold (GB/10 mins) [0 to disable, Enter to cancel]: "
     read NEW_SPIKE
+    case "\$NEW_SPIKE" in ''|*[!0-9.]*) echo -e "  \${C_RED}Please enter a number (GB/10 mins)\${C_RESET}"; NEW_SPIKE="" ;; esac
     [ -z "\$NEW_SPIKE" ] && return
-    sed -i "s/^SPIKE_LIMIT=.*/SPIKE_LIMIT=\${NEW_SPIKE}/" /root/traffic_spike_check.sh
+    sed -i "s|^SPIKE_LIMIT=.*|SPIKE_LIMIT=\${NEW_SPIKE}|" /root/traffic_spike_check.sh
     if [ "\$NEW_SPIKE" = "0" ]; then
         echo -e "  -> Spike alert: \${C_RED}Disabled\${C_RESET}"
     else
@@ -517,53 +535,108 @@ echo -e "${C_GREEN}[4/7] 🔄 Auto-reset script...${C_RESET}"
 
 cat << RESEOF > /root/traffic_reset_check.sh
 #!/bin/bash
+# LIN-Panel monthly reset: state file + catch-up, checked every 10 minutes by cron
 RESET_DAY=${DAY}
 RESET_HOUR=${HOUR}
 RESET_MIN=${MINUTE}
 RESET_SEC=${SECOND}
+STATE_FILE="/root/.lin_panel_last_reset"
 
-TODAY=\$(date +%-d)
-MONTH=\$(date +%-m)
-YEAR=\$(date +%Y)
+is_leap() {
+    if { [ \$(( \$1 % 4 )) -eq 0 ] && [ \$(( \$1 % 100 )) -ne 0 ]; } || [ \$(( \$1 % 400 )) -eq 0 ]; then
+        echo 1
+    else
+        echo 0
+    fi
+}
+days_in_month() {
+    case \$2 in
+        1|3|5|7|8|10|12) echo 31 ;;
+        4|6|9|11) echo 30 ;;
+        2) if [ "\$(is_leap \$1)" = "1" ]; then echo 29; else echo 28; fi ;;
+    esac
+}
+tz_offset() {
+    z=\$(date +%z)
+    case "\$z" in
+        [+-][0-9][0-9][0-9][0-9]) ;;
+        *) echo 0; return ;;
+    esac
+    sign=\${z%????}
+    hh=\${z#?}; hh=\${hh%??}
+    mm=\${z#????}
+    hh=\$((10#\$hh)); mm=\$((10#\$mm))
+    if [ "\$sign" = "-" ]; then
+        echo \$(( -(hh * 3600 + mm * 60) ))
+    else
+        echo \$(( hh * 3600 + mm * 60 ))
+    fi
+}
+epoch_at() {
+    Y=\$1; M=\$2; LEAP=\$(is_leap \$Y)
+    MAXD=\$(days_in_month \$Y \$M)
+    D=\$RESET_DAY
+    [ "\$D" -gt "\$MAXD" ] && D=\$MAXD
+    DOY=0; m=1
+    while [ \$m -lt \$M ]; do
+        case \$m in
+            1|3|5|7|8|10) DOY=\$((DOY+31)) ;;
+            4|6|9|11) DOY=\$((DOY+30)) ;;
+            2) DOY=\$((DOY+28+LEAP)) ;;
+        esac
+        m=\$((m+1))
+    done
+    DOY=\$((DOY + D))
+    echo \$(( (Y - 1970) * 31536000 + ((Y - 1969) / 4) * 86400 - ((Y - 1901) / 100) * 86400 + ((Y - 1601) / 400) * 86400 + (DOY - 1) * 86400 + RESET_HOUR * 3600 + RESET_MIN * 60 + RESET_SEC - TZOFF ))
+}
+TZOFF=\$(tz_offset)
 
-MAX_DAY=31
-case \$MONTH in 2) MAX_DAY=28;; 4|6|9|11) MAX_DAY=30;; esac
-if { [ \$((YEAR % 4)) -eq 0 ] && [ \$((YEAR % 100)) -ne 0 ]; } || [ \$((YEAR % 400)) -eq 0 ]; then
-    [ "\$MONTH" -eq 2 ] && MAX_DAY=29
-fi
+NOW=\$(date +%s)
+Y=\$(date +%Y); M=\$(date +%-m)
+T1=\$(epoch_at \$Y \$M)
+if [ "\$M" -eq 12 ]; then Y2=\$((Y+1)); M2=1; else Y2=\$Y; M2=\$((M+1)); fi
+T2=\$(epoch_at \$Y2 \$M2)
 
-TARGET_DAY=\$RESET_DAY
-[ "\$TARGET_DAY" -gt "\$MAX_DAY" ] && TARGET_DAY=\$MAX_DAY
+LAST=\$(cat "\$STATE_FILE" 2>/dev/null)
+case "\$LAST" in ''|*[!0-9]*) LAST=0 ;; esac
+if [ "\$LAST" -eq 0 ]; then echo "\$NOW" > "\$STATE_FILE"; exit 0; fi
 
-if [ "\$TODAY" -ne "\$TARGET_DAY" ]; then
-    exit 0
-fi
+TARGET=""
+if [ "\$T1" -gt "\$LAST" ]; then TARGET=\$T1; elif [ "\$T2" -gt "\$LAST" ]; then TARGET=\$T2; fi
+[ -z "\$TARGET" ] && exit 0
+[ "\$NOW" -ge "\$TARGET" ] || exit 0
 
-LEAP=0
-if { [ \$((YEAR % 4)) -eq 0 ] && [ \$((YEAR % 100)) -ne 0 ]; } || [ \$((YEAR % 400)) -eq 0 ]; then LEAP=1; fi
-DOY=0
-for m in 1 2 3 4 5 6 7 8 9 10 11; do
-    [ \$m -ge \$MONTH ] && break
-    case \$m in 1|3|5|7|8|10) DOY=\$((DOY+31));; 4|6|9|11) DOY=\$((DOY+30));; 2) DOY=\$((DOY+28+LEAP));; esac
+# Reset point reached: wipe vnstat data and zero the one-shot baseline
+systemctl stop vnstat 2>/dev/null || rc-service vnstatd stop 2>/dev/null
+[ -d /var/lib/vnstat ] && rm -rf /var/lib/vnstat/*
+systemctl start vnstat 2>/dev/null || rc-service vnstatd start 2>/dev/null
+# The baseline is one-shot: zero BASELINE in the generated scripts after reset
+for f in /root/lin-panel.sh /root/lin-panel-en.sh /root/traffic_check.sh; do
+    [ -f "\$f" ] && sed -i 's/^BASELINE=.*/BASELINE=0/' "\$f"
 done
-DOY=\$((DOY + TARGET_DAY))
-NOW_S=\$(date +%s)
-TARGET_S=\$(( (YEAR - 1970) * 31536000 + ((YEAR - 1969) / 4) * 86400 - ((YEAR - 1901) / 100) * 86400 + ((YEAR - 1601) / 400) * 86400 + (DOY - 1) * 86400 + RESET_HOUR * 3600 + RESET_MIN * 60 + RESET_SEC ))
-SLEEP=\$(( TARGET_S - NOW_S ))
-[ "\$SLEEP" -gt 0 ] && sleep "\$SLEEP"
-
-systemctl stop vnstat
-rm -rf /var/lib/vnstat/*
-systemctl start vnstat
+echo "\$TARGET" > "\$STATE_FILE" 
 RESEOF
 chmod +x /root/traffic_reset_check.sh
+date +%s > /root/.lin_panel_last_reset   # initial period start, so a fresh install is not reset immediately
 
 echo -e "${C_GREEN}[5/7] 📊 Daily logging...${C_RESET}"
 
 EXISTING_CRON=$(crontab -l 2>/dev/null || true)
 
-CRON_TREND='59 23 * * * MAIN_IF=$(ip route get 8.8.8.8 2>/dev/null | awk '"'"'{print $5; exit}'"'"'); [ -z "$MAIN_IF" ] && MAIN_IF=$(ip route 2>/dev/null | grep default | awk '"'"'{print $5; exit}'"'"'); [ -z "$MAIN_IF" ] && MAIN_IF="eth0"; echo "$(date +%Y-%m-%d) $(vnstat -m -i "$MAIN_IF" | awk '"'"'/total/{print $NF}'"'"')" >> /root/traffic_history.log && tail -30 /root/traffic_history.log > /tmp/.tl && mv /tmp/.tl /root/traffic_history.log'
-CRON_RESET="0 0 * * * /root/traffic_reset_check.sh"
+CRON_TREND="59 23 * * * /root/traffic_trend.sh"
+cat << TRENDEOF > /root/traffic_trend.sh
+#!/bin/bash
+# Daily 23:59 snapshot of current-month usage (GB) for trend and history
+MAIN_IF=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
+[ -z "\$MAIN_IF" ] && MAIN_IF=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
+[ -z "\$MAIN_IF" ] && MAIN_IF="eth0"
+mkdir -p /run/lin-panel 2>/dev/null
+V=\$(vnstat --oneline 1 -i "\$MAIN_IF" 2>/dev/null | awk -F';' 'NF>=11{printf "%.2f", (\$9+\$10)/1073741824}')
+echo "\$(date +%Y-%m-%d) \${V:-0}" >> /root/traffic_history.log
+tail -30 /root/traffic_history.log > /run/lin-panel/trend.tmp && mv /run/lin-panel/trend.tmp /root/traffic_history.log
+TRENDEOF
+chmod 700 /root/traffic_trend.sh
+CRON_RESET="*/10 * * * * /root/traffic_reset_check.sh"
 CRON_SPIKE="*/10 * * * * /root/traffic_spike_check.sh"
 
 EXISTING_CRON=$(echo "$EXISTING_CRON" | grep -v 'traffic_history\.log')
@@ -600,15 +673,17 @@ if [ "$TG_ENABLE" = "Y" ] || [ "$TG_ENABLE" = "y" ]; then
     while [ "$TG_OK" = "0" ]; do
         printf "  Bot Token: "
         read TG_TOKEN
+case "$TG_TOKEN" in ''|*[!0-9A-Za-z_:\-]*) echo -e "  ${C_RED}Invalid token format (expected 123456:AA-xxx), please re-enter${C_RESET}"; continue ;; esac
         printf "  Chat ID: "
         read TG_CHAT
+case "$TG_CHAT" in -[0-9]*|[0-9]*|@*) ;; *) echo -e "  ${C_RED}Invalid chat id (number or @channel), please re-enter${C_RESET}"; continue ;; esac
         echo ""
         echo -e "  ${C_WHITE}Sending test message...${C_RESET}"
-        if curl -sf -o /tmp/.tg_test.json -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" -d chat_id="${TG_CHAT}" -d text="🔔 LIN-Panel Test" -d parse_mode="HTML" 2>/dev/null; then
+        if curl -sf -o /run/lin-panel/tg_test.json -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" -d chat_id="${TG_CHAT}" -d text="🔔 LIN-Panel Test" -d parse_mode="HTML" 2>/dev/null; then
             echo -e "  ${C_GREEN}✅ Test sent! Check your Telegram${C_RESET}"
             TG_OK=1
         else
-            TG_ERR=$(grep -o '"description":"[^"]*"' /tmp/.tg_test.json 2>/dev/null | cut -d'"' -f4)
+            TG_ERR=$(grep -o '"description":"[^"]*"' /run/lin-panel/tg_test.json 2>/dev/null | cut -d'"' -f4)
             echo -e "  ${C_RED}❌ Test failed${C_RESET}"
             [ -n "$TG_ERR" ] && echo -e "  ${C_RED}   Reason: ${TG_ERR}${C_RESET}"
             echo ""
@@ -623,7 +698,7 @@ if [ "$TG_ENABLE" = "Y" ] || [ "$TG_ENABLE" = "y" ]; then
                 *) echo "" ;;
             esac
         fi
-        rm -f /tmp/.tg_test.json
+        rm -f /run/lin-panel/tg_test.json
     done
     echo ""
     if [ "$TG_ENABLE" = "Y" ] || [ "$TG_ENABLE" = "y" ]; then
@@ -683,12 +758,12 @@ MAIN_INTERFACE=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE="eth0"
 
-VSTAT_JSON=\$(vnstat -m -i "\$MAIN_INTERFACE" --json 2>/dev/null)
+CUR_OL=\$(vnstat --oneline 1 -i "\$MAIN_INTERFACE" 2>/dev/null)
 TRAFFIC_BYTES=0
-if [ -n "\$VSTAT_JSON" ]; then
-    RX=\$(echo "\$VSTAT_JSON" | grep -o '"rx":[^,}]*' | tail -1 | grep -o '[0-9]*')
-    TX=\$(echo "\$VSTAT_JSON" | grep -o '"tx":[^,}]*' | tail -1 | grep -o '[0-9]*')
-    TOTAL=\$(echo "\$VSTAT_JSON" | grep -o '"total":[^,}]*' | tail -1 | grep -o '[0-9]*')
+if [ -n "\$CUR_OL" ]; then
+    RX=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$9}')
+    TX=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$10}')
+    TOTAL=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$11}')
     RX=\${RX:-0}; TX=\${TX:-0}; TOTAL=\${TOTAL:-0}
     if [ "\$BILLING_MODE" = "2" ]; then
         BILLING_LABEL="Inbound"
@@ -723,7 +798,7 @@ curl -s -X POST "https://api.telegram.org/bot\${TG_TOKEN}/sendMessage" \\
     -d text="\${MSG}" \\
     -d parse_mode="HTML" >/dev/null 2>&1
 TGEOF
-    chmod +x /root/traffic_check.sh
+    chmod 700 /root/traffic_check.sh
 
    
     EXISTING_CRON=$(crontab -l 2>/dev/null || true)
@@ -749,12 +824,12 @@ MAIN_INTERFACE=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE="eth0"
 
-VSTAT_JSON=\$(vnstat -m -i "\$MAIN_INTERFACE" --json 2>/dev/null)
+CUR_OL=\$(vnstat --oneline 1 -i "\$MAIN_INTERFACE" 2>/dev/null)
 TRAFFIC_BYTES=0
-if [ -n "\$VSTAT_JSON" ]; then
-    RX=\$(echo "\$VSTAT_JSON" | grep -o '"rx":[^,}]*' | tail -1 | grep -o '[0-9]*')
-    TX=\$(echo "\$VSTAT_JSON" | grep -o '"tx":[^,}]*' | tail -1 | grep -o '[0-9]*')
-    TOTAL=\$(echo "\$VSTAT_JSON" | grep -o '"total":[^,}]*' | tail -1 | grep -o '[0-9]*')
+if [ -n "\$CUR_OL" ]; then
+    RX=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$9}')
+    TX=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$10}')
+    TOTAL=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$11}')
     RX=\${RX:-0}; TX=\${TX:-0}; TOTAL=\${TOTAL:-0}
     if [ "\$BILLING_MODE" = "2" ]; then
         BILLING_LABEL="Inbound"
@@ -793,7 +868,7 @@ curl -s -X POST "https://api.telegram.org/bot\${TG_TOKEN}/sendMessage" \\
     -d parse_mode="HTML" >/dev/null 2>&1
 rm -f /root/traffic_test.sh
 TESTEOF
-    chmod +x /root/traffic_test.sh
+    chmod 700 /root/traffic_test.sh
     nohup /root/traffic_test.sh >/dev/null 2>&1 &
     echo -e "  ${C_GREEN}✅ Test push scheduled, check Telegram in 10 minutes${C_RESET}"
     fi
@@ -805,6 +880,7 @@ echo ""
 printf "  Enter short-term traffic spike alert threshold (GB/10 mins) [default: 5, 0 to disable]: "
 read SPIKE_LIMIT
 SPIKE_LIMIT="${SPIKE_LIMIT:-5}"
+case "$SPIKE_LIMIT" in ''|*[!0-9.]*) echo -e "  ${C_RED}Spike threshold must be a number, falling back to 5${C_RESET}"; SPIKE_LIMIT=5 ;; esac
 if [ "$SPIKE_LIMIT" = "0" ]; then
     echo -e "  -> Short-term spike alert: ${C_RED}Disabled${C_RESET}"
 else
@@ -828,7 +904,10 @@ STAT_PATH="/sys/class/net/\$MAIN_INTERFACE/statistics"
 RX=\$(cat "\$STAT_PATH/rx_bytes" 2>/dev/null || echo 0)
 TX=\$(cat "\$STAT_PATH/tx_bytes" 2>/dev/null || echo 0)
 NOW_TOTAL=\$(( RX + TX ))
-LAST_FILE="/tmp/.lin_last_traffic"
+LAST_DIR="/run/lin-panel"
+mkdir -p "\$LAST_DIR" 2>/dev/null && chmod 700 "\$LAST_DIR" 2>/dev/null
+LAST_FILE="\$LAST_DIR/last_traffic"
+[ -L "\$LAST_FILE" ] && exit 0
 if [ -f "\$LAST_FILE" ] && [ -n "\$TG_TOKEN" ] && [ -n "\$TG_CHAT" ]; then
     LAST_TOTAL=\$(cat "\$LAST_FILE")
     if [ "\$NOW_TOTAL" -gt "\$LAST_TOTAL" ] 2>/dev/null; then
@@ -848,7 +927,7 @@ if [ -f "\$LAST_FILE" ] && [ -n "\$TG_TOKEN" ] && [ -n "\$TG_CHAT" ]; then
 fi
 echo "\$NOW_TOTAL" > "\$LAST_FILE"
 SPIKEEOF
-chmod +x /root/traffic_spike_check.sh
+chmod 700 /root/traffic_spike_check.sh
 
 echo -e "${C_GREEN}[7/7] 🔐 Login config...${C_RESET}"
 
@@ -863,7 +942,7 @@ if [ "$ENABLE_LOGIN_AUTO" = "1" ]; then
 case "$-" in
     *i*)
         case "$SSH_CONNECTION" in
-            *"",*) [ -z "$SCP_OR_SFTP" ] && /root/lin-panel-en.sh ;;
+            *" "*) /root/lin-panel-en.sh ;;
         esac
         ;;
 esac

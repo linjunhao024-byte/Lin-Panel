@@ -6,7 +6,7 @@
 
 # 📊 LIN-Panel
 
-**Minimalist Traffic Monitor Pseudo-Panel · v1.1.0**
+**Minimalist Traffic Monitor Pseudo-Panel · v1.1.1**
 
 > No ports · No daemons · No web frameworks · Everything runs inside SSH
 
@@ -19,7 +19,7 @@
 [![Issues](https://img.shields.io/github/issues/linjunhao024-byte/Lin-Panel?style=flat&logo=github&cacheSeconds=60)](https://github.com/linjunhao024-byte/Lin-Panel/issues)
 [![License](https://img.shields.io/github/license/linjunhao024-byte/Lin-Panel?style=flat&cacheSeconds=3600)](https://github.com/linjunhao024-byte/Lin-Panel/blob/main/LICENSE)
 [![Language](https://img.shields.io/badge/Language-Shell-007ACC?style=flat&logo=gnu-bash)](#)
-[![Dependencies](https://img.shields.io/badge/Dependencies-vnstat%20+%20jq-brightgreen?style=flat)](#)
+[![Dependencies](https://img.shields.io/badge/Dependencies-vnstat%20+%20jq%20+%20curl-brightgreen?style=flat)](#)
 
 </div>
 
@@ -114,7 +114,7 @@ chmod +x install-ubuntu-en.sh && ./install-ubuntu-en.sh   # Ubuntu
 |------|-------------|
 | OS | Alpine / Debian / Ubuntu |
 | Privileges | root |
-| Dependencies | vnstat + jq (auto-installed) |
+| Dependencies | vnstat + jq + curl (auto-installed and verified) |
 | Disk | < 5MB |
 | Memory | < 3MB |
 
@@ -140,7 +140,7 @@ Fully interactive, press Enter for defaults:
 ┌──────────── Steps ────────────────────┐
 
   [1/7] 🌐 Timezone      9 timezones
-  [2/7] 📦 Dependencies  vnstat + jq
+  [2/7] 📦 Dependencies  vnstat + jq + curl
   [3/7] 🎨 Generate       Dynamic injection
   [4/7] 🔄 Reset          Smart month-end fallback
   [5/7] 📊 Cron           Idempotent append
@@ -186,7 +186,7 @@ lin-panel              # or your custom name
 
 ```
 ██████████████████████████████████████████████████████████████████████████
-  📊 LIN-PANEL v1.1.0                            UP: 24 Days | Load: 0.05
+  📊 LIN-PANEL v1.1.1                            UP: 24 Days | Load: 0.05
 ██████████████████████████████████████████████████████████████████████████
 
 ╔════════════════════════════════════════════════════════════════╗
@@ -224,21 +224,22 @@ lin-panel              # or your custom name
 ```
 /root/
 ├── lin-panel.sh              # Panel script
-├── traffic_reset_check.sh    # Smart reset (month-end fallback)
-├── traffic_check.sh          # Telegram push (optional)
-├── traffic_spike_check.sh    # Traffic spike alert (every 10 mins)
-└── traffic_history.log       # Trend log (auto-trim 30 days)
+├── traffic_reset_check.sh    # Monthly reset (state file + catch-up)
+├── traffic_trend.sh          # Daily snapshot of current-month usage
+├── traffic_check.sh          # Telegram push (optional, mode 600)
+├── traffic_spike_check.sh    # Traffic spike alert (every 10 mins, mode 600)
+└── traffic_history.log       # Usage history (date + current-month GB, trimmed to 30)
 
 /usr/local/bin/
 └── lin-panel → /root/lin-panel.sh
 
 ~/.bashrc:
-└── LIN-PANEL-AUTO-START      # SSH login auto-start (interactive check + SCP protection)
+└── LIN-PANEL-AUTO-START      # SSH login auto-start (interactive + SSH_CONNECTION check)
 
 Crontab:
 ├── */10 * * * *       Traffic spike detection (optional)
 ├── 59 23 * * *        Daily record + trim
-├── 0 0 * * *          Daily reset check
+├── */10 * * * *       Reset-point check every 10 min (catch-up)
 └── 0 9/12 * * *       Telegram push (optional)
 ```
 
@@ -300,7 +301,7 @@ Re-run the installer. All parameters reconfigure without affecting existing data
 Use menu `[7] Uninstall`, or manually:
 
 ```bash
-rm -f /root/lin-panel.sh /root/traffic_reset_check.sh /root/traffic_check.sh /root/traffic_spike_check.sh /root/traffic_history.log
+rm -f /root/lin-panel.sh /root/traffic_reset_check.sh /root/traffic_trend.sh /root/traffic_check.sh /root/traffic_spike_check.sh /root/traffic_history.log
 rm -f /usr/local/bin/lin-panel      # or your custom command name
 sed -i '/LIN-PANEL-AUTO-START/,/END LIN-PANEL-AUTO-START/d' /root/.bashrc
 crontab -e  # remove related entries
@@ -329,7 +330,9 @@ Yes. Idempotent design: `.bashrc` checks before append, Cron deduplicates, `ln -
 <details>
 <summary><strong>Q: How accurate?</strong></summary>
 
-Data from vnstat (kernel network stats). Typical accuracy: 1-3%.
+The panel reads the **current month** counters from vnstat (`--oneline` fields 9-11: this month's rx / tx / total), not the all-time totals. Accuracy is roughly 1-3%, limited by kernel stats vs vnstat flush interval.
+
+The "usage baseline" asked during install is one-shot: it is reset to zero after the month rolls over, so it never stacks every period.
 
 </details>
 

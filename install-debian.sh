@@ -1,4 +1,8 @@
 #!/bin/bash
+if [ "$(id -u)" -ne 0 ]; then
+    echo "请以 root 身份运行本脚本 / please run as root"
+    exit 1
+fi
 
 C_CYAN='\033[1;36m'
 C_YELLOW='\033[1;33m'
@@ -15,7 +19,7 @@ echo '  / /  / / /    /  ______ / /_/ / __ `/ __ \/ _ \/ /'
 echo ' / /__/ / / /|  / /_____// ____/ /_/ / / / /  __/ /'
 echo '/____/___/_/ |_/        /_/    \__,_/_/ /_/\___/_/'
 echo -e "${C_RESET}"
-echo -e "${C_YELLOW}           极简流量监控伪面板 · v1.1.0${C_RESET}"
+echo -e "${C_YELLOW}           极简流量监控伪面板 · v1.1.1${C_RESET}"
 echo ""
 echo -e "${C_CYAN}╭──────────────────────────────────────────────────────────────╮${C_RESET}"
 echo -e "${C_YELLOW}│              欢迎使用 LIN-PANEL 一键安装脚本                       │${C_RESET}"
@@ -29,6 +33,7 @@ printf "请输入流量上限(GB) [默认: 350]: "
 read LIMIT
 LIMIT="${LIMIT:-350}"
 echo -e "  -> 流量上限设置为: ${C_YELLOW}${LIMIT}GB${C_RESET}"
+case "$LIMIT" in ''|*[!0-9.]*|*.*.*) echo -e "  ${C_RED}⚠ 流量上限必须是非负数字，已使用默认值 350${C_RESET}"; LIMIT=350 ;; esac
 echo ""
 
 printf "请选择计费模式\n"
@@ -87,6 +92,13 @@ read CMD
 CMD="${CMD:-lin-panel}"
 case "$CMD" in */*|*\ *|*[\<\>\&\|\;\$\`\!]*) echo -e "  ${C_RED}⚠ 命令名包含非法字符，已使用默认值 lin-panel${C_RESET}"; CMD="lin-panel" ;;
 esac
+case "$CMD" in
+    sh|bash|dash|ash|rm|cp|mv|ln|ls|cat|sed|awk|grep|curl|wget|ss|ip|top|ps|kill|su|sudo|apt|apt-get|apk|systemctl|service|rc-service|crontab|vnstat|python|python3|node|npm|docker|git|tar|clear|reboot|shutdown)
+        echo -e "  ${C_RED}⚠ 该名称与系统命令重名，已使用默认值 lin-panel${C_RESET}"; CMD="lin-panel" ;;
+esac
+if [ -e "/usr/local/bin/$CMD" ] && [ ! -L "/usr/local/bin/$CMD" ]; then
+    echo -e "  ${C_RED}⚠ /usr/local/bin/$CMD 已存在且不是本面板软链，已使用默认值 lin-panel${C_RESET}"; CMD="lin-panel"
+fi
 echo -e "  -> 快捷命令设置为: ${C_YELLOW}${CMD}${C_RESET}"
 echo ""
 
@@ -151,9 +163,14 @@ fi
 
 echo -e "${C_GREEN}[2/7] 📦 正在安装必要依赖 (vnstat)...${C_RESET}"
 
-apt-get update -qq && apt-get install -y vnstat jq >/dev/null 2>&1
+apt-get update -qq && apt-get install -y vnstat jq curl >/dev/null 2>&1
 systemctl start vnstat >/dev/null 2>&1
 systemctl enable vnstat >/dev/null 2>&1
+if ! command -v vnstat >/dev/null 2>&1; then
+    echo -e "  ${C_RED}❌ vnstat 安装失败：依赖未就绪，已中止安装（请检查软件源/网络后重试）${C_RESET}"
+    exit 1
+fi
+mkdir -p /run/lin-panel 2>/dev/null && chmod 700 /run/lin-panel 2>/dev/null
 
 echo -e "${C_GREEN}[3/7] 🎨 正在生成高级 TUI 监控面板...${C_RESET}"
 
@@ -183,12 +200,12 @@ MAIN_INTERFACE=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE="eth0"
 
-VSTAT_JSON=\$(vnstat -m -i "\$MAIN_INTERFACE" --json 2>/dev/null)
+CUR_OL=\$(vnstat --oneline 1 -i "\$MAIN_INTERFACE" 2>/dev/null)
 TRAFFIC_BYTES=0
-if [ -n "\$VSTAT_JSON" ]; then
-    RX=\$(echo "\$VSTAT_JSON" | grep -o '"rx":[^,}]*' | tail -1 | grep -o '[0-9]*')
-    TX=\$(echo "\$VSTAT_JSON" | grep -o '"tx":[^,}]*' | tail -1 | grep -o '[0-9]*')
-    TOTAL=\$(echo "\$VSTAT_JSON" | grep -o '"total":[^,}]*' | tail -1 | grep -o '[0-9]*')
+if [ -n "\$CUR_OL" ]; then
+    RX=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$9}')
+    TX=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$10}')
+    TOTAL=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$11}')
     RX=\${RX:-0}; TX=\${TX:-0}; TOTAL=\${TOTAL:-0}
     if [ "\$BILLING_MODE" = "2" ]; then
         BILLING_LABEL="入站计费"
@@ -243,7 +260,7 @@ clear
 COLS=\$(tput cols 2>/dev/null || echo 80)
 UPTIME_STR=\$(uptime -p 2>/dev/null | sed 's/up //' || uptime 2>/dev/null | awk -F',' '{print \$1}' | awk '{\$1=""; print \$0}' | sed 's/^ //')
 LOAD_STR=\$(awk '{printf "%.2f", \$1}' /proc/loadavg 2>/dev/null || uptime 2>/dev/null | awk -F'load average:' '{print \$2}' | awk -F',' '{gsub(/^ /,"",\$1); print \$1}')
-LEFT=" 📊 LIN-PANEL v1.1.0 "
+LEFT=" 📊 LIN-PANEL v1.1.1 "
 RIGHT=" UP: \${UPTIME_STR} | Load: \${LOAD_STR} "
 LEFT_LEN=\${#LEFT}
 RIGHT_LEN=\${#RIGHT}
@@ -424,10 +441,11 @@ do_modify_spike() {
     fi
     printf "  请输入新阈值(GB/10分钟) [输入 0 禁用]: "
     read NEW_SPIKE
+    case "\$NEW_SPIKE" in ''|*[!0-9.]*) echo -e "  \${C_RED}⚠ 请输入数字（GB/10分钟）\${C_RESET}"; NEW_SPIKE="" ;; esac
     if [ -z "\$NEW_SPIKE" ]; then
         echo -e "  \${C_YELLOW}已取消\${C_RESET}"
     else
-        sed -i "s/^SPIKE_LIMIT=.*/SPIKE_LIMIT=\${NEW_SPIKE}/" /root/traffic_spike_check.sh
+        sed -i "s|^SPIKE_LIMIT=.*|SPIKE_LIMIT=\${NEW_SPIKE}|" /root/traffic_spike_check.sh
         if [ "\$NEW_SPIKE" = "0" ]; then
             echo -e "  \${C_RED}短时激增告警已禁用\${C_RESET}"
         else
@@ -530,53 +548,108 @@ echo -e "${C_GREEN}[4/7] 🔄 正在配置自动重置脚本...${C_RESET}"
 
 cat << RESEOF > /root/traffic_reset_check.sh
 #!/bin/bash
+# LIN-Panel 月度重置：状态文件 + 补偿。cron 每 10 分钟检查，跨过重置点后自动补跑
 RESET_DAY=${DAY}
 RESET_HOUR=${HOUR}
 RESET_MIN=${MINUTE}
 RESET_SEC=${SECOND}
+STATE_FILE="/root/.lin_panel_last_reset"
 
-TODAY=\$(date +%-d)
-MONTH=\$(date +%-m)
-YEAR=\$(date +%Y)
+is_leap() {
+    if { [ \$(( \$1 % 4 )) -eq 0 ] && [ \$(( \$1 % 100 )) -ne 0 ]; } || [ \$(( \$1 % 400 )) -eq 0 ]; then
+        echo 1
+    else
+        echo 0
+    fi
+}
+days_in_month() {
+    case \$2 in
+        1|3|5|7|8|10|12) echo 31 ;;
+        4|6|9|11) echo 30 ;;
+        2) if [ "\$(is_leap \$1)" = "1" ]; then echo 29; else echo 28; fi ;;
+    esac
+}
+tz_offset() {
+    z=\$(date +%z)
+    case "\$z" in
+        [+-][0-9][0-9][0-9][0-9]) ;;
+        *) echo 0; return ;;
+    esac
+    sign=\${z%????}
+    hh=\${z#?}; hh=\${hh%??}
+    mm=\${z#????}
+    hh=\$((10#\$hh)); mm=\$((10#\$mm))
+    if [ "\$sign" = "-" ]; then
+        echo \$(( -(hh * 3600 + mm * 60) ))
+    else
+        echo \$(( hh * 3600 + mm * 60 ))
+    fi
+}
+epoch_at() {
+    Y=\$1; M=\$2; LEAP=\$(is_leap \$Y)
+    MAXD=\$(days_in_month \$Y \$M)
+    D=\$RESET_DAY
+    [ "\$D" -gt "\$MAXD" ] && D=\$MAXD
+    DOY=0; m=1
+    while [ \$m -lt \$M ]; do
+        case \$m in
+            1|3|5|7|8|10) DOY=\$((DOY+31)) ;;
+            4|6|9|11) DOY=\$((DOY+30)) ;;
+            2) DOY=\$((DOY+28+LEAP)) ;;
+        esac
+        m=\$((m+1))
+    done
+    DOY=\$((DOY + D))
+    echo \$(( (Y - 1970) * 31536000 + ((Y - 1969) / 4) * 86400 - ((Y - 1901) / 100) * 86400 + ((Y - 1601) / 400) * 86400 + (DOY - 1) * 86400 + RESET_HOUR * 3600 + RESET_MIN * 60 + RESET_SEC - TZOFF ))
+}
+TZOFF=\$(tz_offset)
 
-MAX_DAY=31
-case \$MONTH in 2) MAX_DAY=28;; 4|6|9|11) MAX_DAY=30;; esac
-if { [ \$((YEAR % 4)) -eq 0 ] && [ \$((YEAR % 100)) -ne 0 ]; } || [ \$((YEAR % 400)) -eq 0 ]; then
-    [ "\$MONTH" -eq 2 ] && MAX_DAY=29
-fi
+NOW=\$(date +%s)
+Y=\$(date +%Y); M=\$(date +%-m)
+T1=\$(epoch_at \$Y \$M)
+if [ "\$M" -eq 12 ]; then Y2=\$((Y+1)); M2=1; else Y2=\$Y; M2=\$((M+1)); fi
+T2=\$(epoch_at \$Y2 \$M2)
 
-TARGET_DAY=\$RESET_DAY
-[ "\$TARGET_DAY" -gt "\$MAX_DAY" ] && TARGET_DAY=\$MAX_DAY
+LAST=\$(cat "\$STATE_FILE" 2>/dev/null)
+case "\$LAST" in ''|*[!0-9]*) LAST=0 ;; esac
+if [ "\$LAST" -eq 0 ]; then echo "\$NOW" > "\$STATE_FILE"; exit 0; fi
 
-if [ "\$TODAY" -ne "\$TARGET_DAY" ]; then
-    exit 0
-fi
+TARGET=""
+if [ "\$T1" -gt "\$LAST" ]; then TARGET=\$T1; elif [ "\$T2" -gt "\$LAST" ]; then TARGET=\$T2; fi
+[ -z "\$TARGET" ] && exit 0
+[ "\$NOW" -ge "\$TARGET" ] || exit 0
 
-LEAP=0
-if { [ \$((YEAR % 4)) -eq 0 ] && [ \$((YEAR % 100)) -ne 0 ]; } || [ \$((YEAR % 400)) -eq 0 ]; then LEAP=1; fi
-DOY=0
-for m in 1 2 3 4 5 6 7 8 9 10 11; do
-    [ \$m -ge \$MONTH ] && break
-    case \$m in 1|3|5|7|8|10) DOY=\$((DOY+31));; 4|6|9|11) DOY=\$((DOY+30));; 2) DOY=\$((DOY+28+LEAP));; esac
+# 到达/越过重置点：清空 vnstat 数据，并把一次性基线归零
+systemctl stop vnstat 2>/dev/null || rc-service vnstatd stop 2>/dev/null
+[ -d /var/lib/vnstat ] && rm -rf /var/lib/vnstat/*
+systemctl start vnstat 2>/dev/null || rc-service vnstatd start 2>/dev/null
+# 基线是一次性的：重置后把生成脚本里的 BASELINE 归零，避免每期叠加
+for f in /root/lin-panel.sh /root/lin-panel-en.sh /root/traffic_check.sh; do
+    [ -f "\$f" ] && sed -i 's/^BASELINE=.*/BASELINE=0/' "\$f"
 done
-DOY=\$((DOY + TARGET_DAY))
-NOW_S=\$(date +%s)
-TARGET_S=\$(( (YEAR - 1970) * 31536000 + ((YEAR - 1969) / 4) * 86400 - ((YEAR - 1901) / 100) * 86400 + ((YEAR - 1601) / 400) * 86400 + (DOY - 1) * 86400 + RESET_HOUR * 3600 + RESET_MIN * 60 + RESET_SEC ))
-SLEEP=\$(( TARGET_S - NOW_S ))
-[ "\$SLEEP" -gt 0 ] && sleep "\$SLEEP"
-
-systemctl stop vnstat
-rm -rf /var/lib/vnstat/*
-systemctl start vnstat
+echo "\$TARGET" > "\$STATE_FILE" 
 RESEOF
 chmod +x /root/traffic_reset_check.sh
+date +%s > /root/.lin_panel_last_reset   # 初始化周期起点，避免刚装完就被立刻重置
 
 echo -e "${C_GREEN}[5/7] 📊 正在配置每日流量记录与自动清理...${C_RESET}"
 
 EXISTING_CRON=$(crontab -l 2>/dev/null || true)
 
-CRON_TREND='59 23 * * * MAIN_IF=$(ip route get 8.8.8.8 2>/dev/null | awk '"'"'{print $5; exit}'"'"'); [ -z "$MAIN_IF" ] && MAIN_IF=$(ip route 2>/dev/null | grep default | awk '"'"'{print $5; exit}'"'"'); [ -z "$MAIN_IF" ] && MAIN_IF="eth0"; echo "$(date +%Y-%m-%d) $(vnstat -m -i "$MAIN_IF" | awk '"'"'/total/{print $NF}'"'"')" >> /root/traffic_history.log && tail -30 /root/traffic_history.log > /tmp/.tl && mv /tmp/.tl /root/traffic_history.log'
-CRON_RESET="0 0 * * * /root/traffic_reset_check.sh"
+CRON_TREND="59 23 * * * /root/traffic_trend.sh"
+cat << TRENDEOF > /root/traffic_trend.sh
+#!/bin/bash
+# 每日 23:59 记录一次当月累计用量（GB），供面板趋势与历史留存
+MAIN_IF=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
+[ -z "\$MAIN_IF" ] && MAIN_IF=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
+[ -z "\$MAIN_IF" ] && MAIN_IF="eth0"
+mkdir -p /run/lin-panel 2>/dev/null
+V=\$(vnstat --oneline 1 -i "\$MAIN_IF" 2>/dev/null | awk -F';' 'NF>=11{printf "%.2f", (\$9+\$10)/1073741824}')
+echo "\$(date +%Y-%m-%d) \${V:-0}" >> /root/traffic_history.log
+tail -30 /root/traffic_history.log > /run/lin-panel/trend.tmp && mv /run/lin-panel/trend.tmp /root/traffic_history.log
+TRENDEOF
+chmod 700 /root/traffic_trend.sh
+CRON_RESET="*/10 * * * * /root/traffic_reset_check.sh"
 CRON_SPIKE="*/10 * * * * /root/traffic_spike_check.sh >/dev/null 2>&1"
 
 EXISTING_CRON=$(echo "$EXISTING_CRON" | grep -v 'traffic_history\.log')
@@ -613,15 +686,17 @@ if [ "$TG_ENABLE" = "Y" ] || [ "$TG_ENABLE" = "y" ]; then
     while [ "$TG_OK" = "0" ]; do
         printf "  请输入 Telegram Bot Token: "
         read TG_TOKEN
+case "$TG_TOKEN" in ''|*[!0-9A-Za-z_:\-]*) echo -e "  ${C_RED}⚠ Token 格式不对（形如 123456:AA-xxx），请重新输入${C_RESET}"; continue ;; esac
         printf "  请输入 Telegram Chat ID: "
         read TG_CHAT
+case "$TG_CHAT" in -[0-9]*|[0-9]*|@*) ;; *) echo -e "  ${C_RED}⚠ Chat ID 格式不对（数字或以 @ 开头的频道名），请重新输入${C_RESET}"; continue ;; esac
         echo ""
         echo -e "  ${C_WHITE}正在发送测试消息...${C_RESET}"
-        if curl -sf -o /tmp/.tg_test.json -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" -d chat_id="${TG_CHAT}" -d text="🔔 LIN-Panel Test" -d parse_mode="HTML" 2>/dev/null; then
+        if curl -sf -o /run/lin-panel/tg_test.json -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" -d chat_id="${TG_CHAT}" -d text="🔔 LIN-Panel Test" -d parse_mode="HTML" 2>/dev/null; then
             echo -e "  ${C_GREEN}✅ 测试消息发送成功！请检查您的 Telegram${C_RESET}"
             TG_OK=1
         else
-            TG_ERR=$(grep -o '"description":"[^"]*"' /tmp/.tg_test.json 2>/dev/null | cut -d'"' -f4)
+            TG_ERR=$(grep -o '"description":"[^"]*"' /run/lin-panel/tg_test.json 2>/dev/null | cut -d'"' -f4)
             echo -e "  ${C_RED}❌ 测试消息发送失败${C_RESET}"
             [ -n "$TG_ERR" ] && echo -e "  ${C_RED}   原因: ${TG_ERR}${C_RESET}"
             echo ""
@@ -636,7 +711,7 @@ if [ "$TG_ENABLE" = "Y" ] || [ "$TG_ENABLE" = "y" ]; then
                 *) echo "" ;;
             esac
         fi
-        rm -f /tmp/.tg_test.json
+        rm -f /run/lin-panel/tg_test.json
     done
     echo ""
     if [ "$TG_ENABLE" = "Y" ] || [ "$TG_ENABLE" = "y" ]; then
@@ -696,12 +771,12 @@ MAIN_INTERFACE=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE="eth0"
 
-VSTAT_JSON=\$(vnstat -m -i "\$MAIN_INTERFACE" --json 2>/dev/null)
+CUR_OL=\$(vnstat --oneline 1 -i "\$MAIN_INTERFACE" 2>/dev/null)
 TRAFFIC_BYTES=0
-if [ -n "\$VSTAT_JSON" ]; then
-    RX=\$(echo "\$VSTAT_JSON" | grep -o '"rx":[^,}]*' | tail -1 | grep -o '[0-9]*')
-    TX=\$(echo "\$VSTAT_JSON" | grep -o '"tx":[^,}]*' | tail -1 | grep -o '[0-9]*')
-    TOTAL=\$(echo "\$VSTAT_JSON" | grep -o '"total":[^,}]*' | tail -1 | grep -o '[0-9]*')
+if [ -n "\$CUR_OL" ]; then
+    RX=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$9}')
+    TX=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$10}')
+    TOTAL=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$11}')
     RX=\${RX:-0}; TX=\${TX:-0}; TOTAL=\${TOTAL:-0}
     if [ "\$BILLING_MODE" = "2" ]; then
         BILLING_LABEL="入站计费"
@@ -736,7 +811,7 @@ curl -s -X POST "https://api.telegram.org/bot\${TG_TOKEN}/sendMessage" \\
     -d text="\${MSG}" \\
     -d parse_mode="HTML" >/dev/null 2>&1
 TGEOF
-    chmod +x /root/traffic_check.sh
+    chmod 700 /root/traffic_check.sh
 
    
     EXISTING_CRON=$(crontab -l 2>/dev/null || true)
@@ -762,12 +837,12 @@ MAIN_INTERFACE=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_INTERFACE" ] && MAIN_INTERFACE="eth0"
 
-VSTAT_JSON=\$(vnstat -m -i "\$MAIN_INTERFACE" --json 2>/dev/null)
+CUR_OL=\$(vnstat --oneline 1 -i "\$MAIN_INTERFACE" 2>/dev/null)
 TRAFFIC_BYTES=0
-if [ -n "\$VSTAT_JSON" ]; then
-    RX=\$(echo "\$VSTAT_JSON" | grep -o '"rx":[^,}]*' | tail -1 | grep -o '[0-9]*')
-    TX=\$(echo "\$VSTAT_JSON" | grep -o '"tx":[^,}]*' | tail -1 | grep -o '[0-9]*')
-    TOTAL=\$(echo "\$VSTAT_JSON" | grep -o '"total":[^,}]*' | tail -1 | grep -o '[0-9]*')
+if [ -n "\$CUR_OL" ]; then
+    RX=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$9}')
+    TX=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$10}')
+    TOTAL=\$(printf '%s' "\$CUR_OL" | awk -F';' 'NF>=11{print \$11}')
     RX=\${RX:-0}; TX=\${TX:-0}; TOTAL=\${TOTAL:-0}
     if [ "\$BILLING_MODE" = "2" ]; then
         BILLING_LABEL="入站计费"
@@ -806,7 +881,7 @@ curl -s -X POST "https://api.telegram.org/bot\${TG_TOKEN}/sendMessage" \\
     -d parse_mode="HTML" >/dev/null 2>&1
 rm -f /root/traffic_test.sh
 TESTEOF
-    chmod +x /root/traffic_test.sh
+    chmod 700 /root/traffic_test.sh
     nohup /root/traffic_test.sh >/dev/null 2>&1 &
     echo -e "  ${C_GREEN}✅ 数据推送测试消息已计划，10 分后请检查 Telegram${C_RESET}"
     fi
@@ -818,6 +893,7 @@ echo ""
 printf "  请输入短时激增告警阈值(GB/10分钟) [默认: 5，输入 0 禁用此功能]: "
 read SPIKE_LIMIT
 SPIKE_LIMIT="${SPIKE_LIMIT:-5}"
+case "$SPIKE_LIMIT" in ''|*[!0-9.]*) echo -e "  ${C_RED}⚠ 激增阈值必须是非负数字，已使用默认值 5${C_RESET}"; SPIKE_LIMIT=5 ;; esac
 if [ "$SPIKE_LIMIT" = "0" ]; then
     echo -e "  -> 短时激增告警: ${C_RED}已禁用${C_RESET}"
 else
@@ -841,7 +917,10 @@ STAT_PATH="/sys/class/net/\$MAIN_INTERFACE/statistics"
 RX=\$(cat "\$STAT_PATH/rx_bytes" 2>/dev/null || echo 0)
 TX=\$(cat "\$STAT_PATH/tx_bytes" 2>/dev/null || echo 0)
 NOW_TOTAL=\$(( RX + TX ))
-LAST_FILE="/tmp/.lin_last_traffic"
+LAST_DIR="/run/lin-panel"
+mkdir -p "\$LAST_DIR" 2>/dev/null && chmod 700 "\$LAST_DIR" 2>/dev/null
+LAST_FILE="\$LAST_DIR/last_traffic"
+[ -L "\$LAST_FILE" ] && exit 0
 if [ -f "\$LAST_FILE" ] && [ -n "\$TG_TOKEN" ] && [ -n "\$TG_CHAT" ]; then
     LAST_TOTAL=\$(cat "\$LAST_FILE")
     if [ "\$NOW_TOTAL" -gt "\$LAST_TOTAL" ] 2>/dev/null; then
@@ -861,7 +940,7 @@ if [ -f "\$LAST_FILE" ] && [ -n "\$TG_TOKEN" ] && [ -n "\$TG_CHAT" ]; then
 fi
 echo "\$NOW_TOTAL" > "\$LAST_FILE"
 SPIKEEOF
-chmod +x /root/traffic_spike_check.sh
+chmod 700 /root/traffic_spike_check.sh
 
 echo -e "${C_GREEN}[7/7] 🔐 正在配置登录自启与快捷命令...${C_RESET}"
 
@@ -876,7 +955,7 @@ if [ "$ENABLE_LOGIN_AUTO" = "1" ]; then
 case "$-" in
     *i*)
         case "$SSH_CONNECTION" in
-            *"",*) [ -z "$SCP_OR_SFTP" ] && /root/lin-panel.sh ;;
+            *" "*) /root/lin-panel.sh ;;
         esac
         ;;
 esac

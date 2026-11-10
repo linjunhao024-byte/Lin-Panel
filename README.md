@@ -6,7 +6,7 @@
 
 # 📊 LIN-Panel
 
-**极简流量监控伪面板 · v1.1.0**
+**极简流量监控伪面板 · v1.1.1**
 
 > 不开端口 · 不跑服务 · 不装 Web 框架 · SSH 会话内完成一切
 
@@ -19,7 +19,7 @@
 [![Issues](https://img.shields.io/github/issues/linjunhao024-byte/Lin-Panel?style=flat&logo=github&cacheSeconds=60)](https://github.com/linjunhao024-byte/Lin-Panel/issues)
 [![License](https://img.shields.io/github/license/linjunhao024-byte/Lin-Panel?style=flat&cacheSeconds=3600)](https://github.com/linjunhao024-byte/Lin-Panel/blob/main/LICENSE)
 [![Language](https://img.shields.io/badge/Language-Shell-007ACC?style=flat&logo=gnu-bash)](#)
-[![Dependencies](https://img.shields.io/badge/Dependencies-vnstat%20+%20jq-brightgreen?style=flat)](#)
+[![Dependencies](https://img.shields.io/badge/Dependencies-vnstat%20+%20jq%20+%20curl-brightgreen?style=flat)](#)
 
 </div>
 
@@ -116,7 +116,7 @@ chmod +x install-ubuntu-en.sh && ./install-ubuntu-en.sh   # Ubuntu
 |------|------|
 | 系统 | Alpine / Debian / Ubuntu |
 | 权限 | root |
-| 依赖 | vnstat + jq（脚本自动安装） |
+| 依赖 | vnstat + jq + curl（脚本自动安装并校验） |
 | 磁盘 | < 5MB |
 | 内存 | < 3MB |
 
@@ -142,7 +142,7 @@ chmod +x install-ubuntu-en.sh && ./install-ubuntu-en.sh   # Ubuntu
 ┌──────────── 安装步骤 ────────────┐
 
   [1/7] 🌐 时区配置     9 个时区可选
-  [2/7] 📦 安装依赖     vnstat + jq
+  [2/7] 📦 安装依赖     vnstat + jq + curl + curl
   [3/7] 🎨 生成面板      动态注入配置
   [4/7] 🔄 重置脚本      智能短月兜底
   [5/7] 📊 定时任务      幂等不覆盖
@@ -188,7 +188,7 @@ lin-panel              # 或你自定义的命令名
 
 ```
 ██████████████████████████████████████████████████████████████████████████
-  📊 LIN-PANEL v1.1.0                            UP: 24 Days | Load: 0.05
+  📊 LIN-PANEL v1.1.1                            UP: 24 Days | Load: 0.05
 ██████████████████████████████████████████████████████████████████████████
 
 ╔════════════════════════════════════════════════════════════════╗
@@ -226,21 +226,22 @@ lin-panel              # 或你自定义的命令名
 ```
 /root/
 ├── lin-panel.sh              # 面板脚本
-├── traffic_reset_check.sh    # 智能重置（短月自动兜底）
-├── traffic_check.sh          # Telegram 推送（可选）
-├── traffic_spike_check.sh    # 流量激增告警（每 10 分钟检测）
-└── traffic_history.log       # 趋势日志（自动裁剪 30 天）
+├── traffic_reset_check.sh    # 月度重置（状态文件 + 跨期补偿）
+├── traffic_trend.sh          # 每日记录当月累计用量
+├── traffic_check.sh          # Telegram 推送（可选，权限 600）
+├── traffic_spike_check.sh    # 流量激增告警（每 10 分钟检测，权限 600）
+└── traffic_history.log       # 用量历史（日期 + 当月累计 GB，裁剪 30 条）
 
 /usr/local/bin/
 └── lin-panel → /root/lin-panel.sh
 
 ~/.bashrc:
-└── LIN-PANEL-AUTO-START      # SSH 登录自启（交互式检测 + SCP 保护）
+└── LIN-PANEL-AUTO-START      # SSH 登录自启（交互式 + SSH_CONNECTION 检测）
 
 Crontab:
 ├── */10 * * * *       流量激增检测（可选）
 ├── 59 23 * * *        每日记录 + 裁剪
-├── 0 0 * * *          每日检查是否重置日
+├── */10 * * * *       每 10 分钟检查重置点（跨期自动补跑）
 └── 0 9/12 * * *       Telegram 推送（可选）
 ```
 
@@ -301,7 +302,7 @@ vnstat 需要几分钟收集数据。等待或手动触发：`vnstat -u`
 面板菜单选 `[7] 一键卸载`，或手动：
 
 ```bash
-rm -f /root/lin-panel.sh /root/traffic_reset_check.sh /root/traffic_check.sh /root/traffic_spike_check.sh /root/traffic_history.log
+rm -f /root/lin-panel.sh /root/traffic_reset_check.sh /root/traffic_trend.sh /root/traffic_check.sh /root/traffic_spike_check.sh /root/traffic_history.log
 rm -f /usr/local/bin/lin-panel      # 或你自定义的命令名
 sed -i '/LIN-PANEL-AUTO-START/,/END LIN-PANEL-AUTO-START/d' /root/.bashrc
 crontab -e  # 删除相关条目
@@ -330,7 +331,9 @@ crontab -e  # 删除相关条目
 <details>
 <summary><strong>Q: 流量数据准确吗？</strong></summary>
 
-来自 vnstat，读取内核网络接口统计，误差 1-3%。
+取自 vnstat 的**当月**统计（`--oneline` 第 9-11 字段，即当前月份的 rx / tx / total），不是开机以来的累计值。误差来自内核统计与 vnstat 落盘间隔，约 1-3%。
+
+安装时填写的「流量基线」是一次性的：本月重置后基线自动归零，不会每期叠加。
 
 </details>
 
