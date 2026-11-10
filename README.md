@@ -19,7 +19,7 @@
 [![Issues](https://img.shields.io/github/issues/linjunhao024-byte/Lin-Panel?style=flat&logo=github&cacheSeconds=60)](https://github.com/linjunhao024-byte/Lin-Panel/issues)
 [![License](https://img.shields.io/github/license/linjunhao024-byte/Lin-Panel?style=flat&cacheSeconds=3600)](https://github.com/linjunhao024-byte/Lin-Panel/blob/main/LICENSE)
 [![Language](https://img.shields.io/badge/Language-Shell-007ACC?style=flat&logo=gnu-bash)](#)
-[![Dependencies](https://img.shields.io/badge/Dependencies-vnstat%20+%20jq%20+%20curl-brightgreen?style=flat)](#)
+[![Dependencies](https://img.shields.io/badge/Dependencies-vnstat%20+%20curl-brightgreen?style=flat)](#)
 
 </div>
 
@@ -116,7 +116,7 @@ chmod +x install-ubuntu-en.sh && ./install-ubuntu-en.sh   # Ubuntu
 |------|------|
 | 系统 | Alpine / Debian / Ubuntu |
 | 权限 | root |
-| 依赖 | vnstat + jq + curl（脚本自动安装并校验） |
+| 依赖 | vnstat + curl（脚本自动安装并校验） |
 | 磁盘 | < 5MB |
 | 内存 | < 3MB |
 
@@ -142,7 +142,7 @@ chmod +x install-ubuntu-en.sh && ./install-ubuntu-en.sh   # Ubuntu
 ┌──────────── 安装步骤 ────────────┐
 
   [1/7] 🌐 时区配置     9 个时区可选
-  [2/7] 📦 安装依赖     vnstat + jq + curl + curl
+  [2/7] 📦 安装依赖     vnstat + curl
   [3/7] 🎨 生成面板      动态注入配置
   [4/7] 🔄 重置脚本      智能短月兜底
   [5/7] 📊 定时任务      幂等不覆盖

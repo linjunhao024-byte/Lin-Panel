@@ -163,7 +163,7 @@ fi
 
 echo -e "${C_GREEN}[2/7] 📦 Installing deps (vnstat)...${C_RESET}"
 
-apk update && apk add bash vnstat jq curl >/dev/null 2>&1
+apk update && apk add bash vnstat curl >/dev/null 2>&1
 rc-service vnstatd start >/dev/null 2>&1
 rc-update add vnstatd default >/dev/null 2>&1
 if ! command -v vnstat >/dev/null 2>&1; then

@@ -19,7 +19,7 @@
 [![Issues](https://img.shields.io/github/issues/linjunhao024-byte/Lin-Panel?style=flat&logo=github&cacheSeconds=60)](https://github.com/linjunhao024-byte/Lin-Panel/issues)
 [![License](https://img.shields.io/github/license/linjunhao024-byte/Lin-Panel?style=flat&cacheSeconds=3600)](https://github.com/linjunhao024-byte/Lin-Panel/blob/main/LICENSE)
 [![Language](https://img.shields.io/badge/Language-Shell-007ACC?style=flat&logo=gnu-bash)](#)
-[![Dependencies](https://img.shields.io/badge/Dependencies-vnstat%20+%20jq%20+%20curl-brightgreen?style=flat)](#)
+[![Dependencies](https://img.shields.io/badge/Dependencies-vnstat%20+%20curl-brightgreen?style=flat)](#)
 
 </div>
 
@@ -114,7 +114,7 @@ chmod +x install-ubuntu-en.sh && ./install-ubuntu-en.sh   # Ubuntu
 |------|-------------|
 | OS | Alpine / Debian / Ubuntu |
 | Privileges | root |
-| Dependencies | vnstat + jq + curl (auto-installed and verified) |
+| Dependencies | vnstat + curl (auto-installed and verified) |
 | Disk | < 5MB |
 | Memory | < 3MB |
 
@@ -140,7 +140,7 @@ Fully interactive, press Enter for defaults:
 ┌──────────── Steps ────────────────────┐
 
   [1/7] 🌐 Timezone      9 timezones
-  [2/7] 📦 Dependencies  vnstat + jq + curl
+  [2/7] 📦 Dependencies  vnstat + curl
   [3/7] 🎨 Generate       Dynamic injection
   [4/7] 🔄 Reset          Smart month-end fallback
   [5/7] 📊 Cron           Idempotent append

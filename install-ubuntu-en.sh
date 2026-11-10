@@ -163,7 +163,7 @@ fi
 
 echo -e "${C_GREEN}[2/7] 📦 Installing deps (vnstat)...${C_RESET}"
 
-apt-get update -qq && apt-get install -y vnstat jq curl >/dev/null 2>&1
+apt-get update -qq && apt-get install -y vnstat curl >/dev/null 2>&1
 systemctl start vnstat >/dev/null 2>&1
 systemctl enable vnstat >/dev/null 2>&1
 if ! command -v vnstat >/dev/null 2>&1; then
