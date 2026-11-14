@@ -352,3 +352,11 @@ crontab -e  # 删除相关条目
 ![Star](https://img.shields.io/github/stars/linjunhao024-byte/Lin-Panel?style=social)
 
 </div>
+
+## 跑测试
+
+```bash
+python tests/_lp_p2_tests.py
+```
+
+离线：只读安装脚本，把片段抽到临时目录里跑；**不安装、不改系统、不写真实 crontab、不碰 `/var/lib/vnstat`**。覆盖：重装 cron 幂等且兼容 busybox grep、面板趋势读 `traffic_history.log` 并降级 vnstat、数字校验统一兜底、vnstat 清理四重保护、apk 与 apt 各归各位。
