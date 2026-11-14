@@ -458,7 +458,7 @@ do_uninstall() {
     echo -e "  \${C_WHITE}Cleaning up...\${C_RESET}"
     rm -f /root/lin-panel.sh /root/lin-panel-en.sh
     echo -e "  ✅ Panel scripts removed"
-    rm -f /root/traffic_reset.sh /root/traffic_reset_check.sh /root/traffic_check.sh /root/traffic_spike_check.sh
+    rm -f /root/traffic_reset.sh /root/traffic_reset_check.sh /root/traffic_check.sh /root/traffic_spike_check.sh /root/traffic_trend.sh
     echo -e "  ✅ Reset/push scripts removed"
     rm -f /root/traffic_history.log
     echo -e "  ✅ Traffic logs removed"
@@ -466,7 +466,7 @@ do_uninstall() {
     echo -e "  ✅ Command shortcut removed"
    
     EXISTING=\$(crontab -l 2>/dev/null || true)
-    CLEANED=\$(echo "\$EXISTING" | grep -v 'traffic_history\|traffic_reset\|traffic_check\|traffic_spike')
+    CLEANED=\$(echo "\$EXISTING" | grep -v 'traffic_history\|traffic_reset\|traffic_check\|traffic_spike\|traffic_trend')
     echo "\$CLEANED" | sed '/^$/d' | crontab - 2>/dev/null
     echo -e "  ✅ Cron tasks cleaned"
    
@@ -642,25 +642,19 @@ chmod 700 /root/traffic_trend.sh
 CRON_RESET="*/10 * * * * /root/traffic_reset_check.sh"
 CRON_SPIKE="*/10 * * * * /root/traffic_spike_check.sh >/dev/null 2>&1"
 
-EXISTING_CRON=$(echo "$EXISTING_CRON" | grep -v 'traffic_history\.log')
+# Drop this tool's own old entries first (including the single-line entry that
+# early versions wrote), then rebuild all three lines from scratch: repeated
+# installs no longer accumulate, and an already-broken crontab gets repaired.
+EXISTING_CRON=$(echo "$EXISTING_CRON" | grep -v 'traffic_trend\.sh\|traffic_reset_check\.sh\|traffic_spike_check\.sh\|traffic_history\.log')
 
-NEW_ENTRIES=""
-if ! echo "$EXISTING_CRON" | grep -qF 'traffic_history.log'; then
-    NEW_ENTRIES="${NEW_ENTRIES}${CRON_TREND}\n"
-fi
-if ! echo "$EXISTING_CRON" | grep -qF 'traffic_reset_check.sh'; then
-    NEW_ENTRIES="${NEW_ENTRIES}${CRON_RESET}\n"
-fi
-if ! echo "$EXISTING_CRON" | grep -qF 'traffic_spike_check.sh'; then
-    NEW_ENTRIES="${NEW_ENTRIES}${CRON_SPIKE}\n"
-fi
+# Each entry must be its own line: printf emits real newlines here.
+# Never build them with a literal backslash-n -- %s does not interpret escapes,
+# so all three tasks end up on ONE line and cron runs none of them.
+NEW_ENTRIES=$(printf '%s\n' "$CRON_TREND" "$CRON_RESET" "$CRON_SPIKE")
+ADDED_COUNT=$(printf '%s\n' "$NEW_ENTRIES" | grep -c .)
 
-if [ -n "$NEW_ENTRIES" ]; then
-    printf "%s\n%s" "$EXISTING_CRON" "$NEW_ENTRIES" | sed '/^$/d' | crontab -
-    echo -e "  -> Added ${C_YELLOW}$(echo "$NEW_ENTRIES" | wc -l | tr -d ' ')${C_RESET} cron"
-else
-    echo -e "  -> Cron exists, skip"
-fi
+printf '%s\n%s\n' "$EXISTING_CRON" "$NEW_ENTRIES" | sed '/^$/d' | crontab -
+echo -e "  -> Added ${C_YELLOW}${ADDED_COUNT}${C_RESET} cron"
 
 systemctl enable cron >/dev/null 2>&1
 systemctl start cron >/dev/null 2>&1

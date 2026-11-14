@@ -472,7 +472,7 @@ do_uninstall() {
     echo -e "  \${C_WHITE}正在清理...\${C_RESET}"
     rm -f /root/lin-panel.sh /root/lin-panel-en.sh
     echo -e "  ✅ 面板脚本已删除"
-    rm -f /root/traffic_reset.sh /root/traffic_reset_check.sh /root/traffic_check.sh /root/traffic_spike_check.sh
+    rm -f /root/traffic_reset.sh /root/traffic_reset_check.sh /root/traffic_check.sh /root/traffic_spike_check.sh /root/traffic_trend.sh
     echo -e "  ✅ 重置/推送脚本已删除"
     rm -f /root/traffic_history.log
     echo -e "  ✅ 流量日志已删除"
@@ -480,7 +480,7 @@ do_uninstall() {
     echo -e "  ✅ 快捷命令已删除"
    
     EXISTING=\$(crontab -l 2>/dev/null || true)
-    CLEANED=\$(echo "\$EXISTING" | grep -v 'traffic_history\|traffic_reset\|traffic_check\|traffic_spike')
+    CLEANED=\$(echo "\$EXISTING" | grep -v 'traffic_history\|traffic_reset\|traffic_check\|traffic_spike\|traffic_trend')
     echo "\$CLEANED" | sed '/^$/d' | crontab - 2>/dev/null
     echo -e "  ✅ 定时任务已清理"
    
@@ -655,25 +655,18 @@ chmod 700 /root/traffic_trend.sh
 CRON_RESET="*/10 * * * * /root/traffic_reset_check.sh"
 CRON_SPIKE="*/10 * * * * /root/traffic_spike_check.sh"
 
-EXISTING_CRON=$(echo "$EXISTING_CRON" | grep -v 'traffic_history\.log')
+# 先剔除本工具自己的旧条目（含早期版本把三条拼成一行的坏条目），再统一重建：
+# 重复安装不会累积，也能顺手修好已经损坏的 crontab
+EXISTING_CRON=$(echo "$EXISTING_CRON" | grep -v 'traffic_trend\.sh\|traffic_reset_check\.sh\|traffic_spike_check\.sh\|traffic_history\.log')
 
-NEW_ENTRIES=""
-if ! echo "$EXISTING_CRON" | grep -qF 'traffic_history.log'; then
-    NEW_ENTRIES="${NEW_ENTRIES}${CRON_TREND}\n"
-fi
-if ! echo "$EXISTING_CRON" | grep -qF 'traffic_reset_check.sh'; then
-    NEW_ENTRIES="${NEW_ENTRIES}${CRON_RESET}\n"
-fi
-if ! echo "$EXISTING_CRON" | grep -qF 'traffic_spike_check.sh'; then
-    NEW_ENTRIES="${NEW_ENTRIES}${CRON_SPIKE}\n"
-fi
+# 三条条目必须各自独立成行：用 printf 逐条生成真实换行。
+# 不能把换行写成反斜杠加 n 的字面量——printf 的 %s 不解释转义，
+# 结果三条任务会被拼成同一行，cron 一条都不会执行。
+NEW_ENTRIES=$(printf '%s\n' "$CRON_TREND" "$CRON_RESET" "$CRON_SPIKE")
+ADDED_COUNT=$(printf '%s\n' "$NEW_ENTRIES" | grep -c .)
 
-if [ -n "$NEW_ENTRIES" ]; then
-    printf "%s\n%s" "$EXISTING_CRON" "$NEW_ENTRIES" | sed '/^$/d' | crontab -
-    echo -e "  -> 已追加 ${C_YELLOW}$(echo "$NEW_ENTRIES" | wc -l | tr -d ' ')${C_RESET} 条定时任务"
-else
-    echo -e "  -> 定时任务已存在，跳过写入"
-fi
+printf '%s\n%s\n' "$EXISTING_CRON" "$NEW_ENTRIES" | sed '/^$/d' | crontab -
+echo -e "  -> 已追加 ${C_YELLOW}${ADDED_COUNT}${C_RESET} 条定时任务"
 
 rc-update add crond default >/dev/null 2>&1
 rc-service crond start >/dev/null 2>&1
