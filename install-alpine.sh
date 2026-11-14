@@ -11,6 +11,16 @@ C_WHITE='\033[1;37m'
 C_RED='\033[1;31m'
 C_RESET='\033[0m'
 
+# 数字校验：POSIX case 实现，不依赖 grep -E，Alpine(busybox ash) / Debian(bash) 通用。
+# 允许 0 / 350 / 350.5；拒绝空串、"."、"1."、".5"、"1.2.3"、负号、空格、字母。
+# 全脚本只此一处定义，下面三处输入（流量上限 / 基线 / 激增阈值）统一复用。
+is_num() {
+    case "$1" in
+        ''|.*|*.|*[!0-9.]*|*.*.*) return 1 ;;
+    esac
+    return 0
+}
+
 clear
 echo -e "${C_CYAN}"
 echo '    __  ____ _  __          ____                   __'
@@ -33,7 +43,10 @@ printf "请输入流量上限(GB) [默认: 350]: "
 read LIMIT
 LIMIT="${LIMIT:-350}"
 echo -e "  -> 流量上限设置为: ${C_YELLOW}${LIMIT}GB${C_RESET}"
-case "$LIMIT" in ''|*[!0-9.]*|*.*.*) echo -e "  ${C_RED}⚠ 流量上限必须是非负数字，已使用默认值 350${C_RESET}"; LIMIT=350 ;; esac
+if ! is_num "$LIMIT"; then
+    echo -e "  ${C_RED}⚠ 流量上限必须是非负数字（如 350 或 350.5），已使用默认值 350${C_RESET}"
+    LIMIT=350
+fi
 echo ""
 
 printf "请选择计费模式\n"
@@ -105,7 +118,10 @@ echo ""
 printf "服务器是否已运行一段时间？请输入本月已使用流量(GB) [默认: 0]: "
 read BASELINE
 BASELINE="${BASELINE:-0}"
-case "$BASELINE" in *[!0-9.]*) echo -e "  ${C_RED}⚠ 输入无效，已使用默认值 0${C_RESET}"; BASELINE=0 ;; esac
+if ! is_num "$BASELINE"; then
+    echo -e "  ${C_RED}⚠ 输入无效（须为非负数字，如 0 或 12.5），已使用默认值 0${C_RESET}"
+    BASELINE=0
+fi
 if [ "$BASELINE" != "0" ]; then
     echo -e "  -> 已使用流量基线: ${C_YELLOW}${BASELINE}GB${C_RESET} (将叠加到 vnstat 统计上)"
 else
@@ -218,7 +234,10 @@ if [ -n "\$CUR_OL" ]; then
         TRAFFIC_BYTES=\$TOTAL
     fi
 fi
-BASELINE_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$BASELINE * 1073741824}")
+# 数值兜底：awk 遇到非法输入会输出空串，空串进 \$(( )) 会让脚本直接崩掉
+BASELINE_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$BASELINE * 1073741824}" 2>/dev/null)
+case "\$BASELINE_BYTES" in ''|*[!0-9]*) BASELINE_BYTES=0 ;; esac
+case "\$TRAFFIC_BYTES" in ''|*[!0-9]*) TRAFFIC_BYTES=0 ;; esac
 TRAFFIC_BYTES=\$(( TRAFFIC_BYTES + BASELINE_BYTES ))
 LIMIT_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$LIMIT * 1073741824}")
 if [ "\$LIMIT_BYTES" -gt 0 ] 2>/dev/null && [ "\$TRAFFIC_BYTES" -gt 0 ] 2>/dev/null; then
@@ -234,7 +253,9 @@ if [ "\$LIMIT_BYTES" -gt 0 ] 2>/dev/null && [ "\$TRAFFIC_BYTES" -gt 0 ] 2>/dev/n
 fi
 
 NOW_S=\$(date +%s)
-CUR_M=\$(date +%-m)
+# busybox date 不支持 %-m（会原样输出字面 "%-m"，后面的算术直接报错、倒计时失效），
+# 改用 %m 再去掉前导 0：1 月得 "1"、11 月得 "11"，GNU date 与 busybox date 行为一致。
+CUR_M=\$(date +%m | sed 's/^0//')
 NEXT_M=\$(( (CUR_M + 1) % 12 ))
 NEXT_Y=\$(date +%Y)
 if [ "\$NEXT_M" -eq 0 ]; then NEXT_M=12; NEXT_Y=\$((NEXT_Y + 1)); fi
@@ -342,7 +363,17 @@ show_trend() {
     echo ""
     echo -e "\${C_GREEN}  📊 近 7 天流量趋势\${C_RESET}"
     echo -e "\${C_CYAN}  ──────────────────────────────────────────────────────────\${C_RESET}"
-    TREND=\$(vnstat -d -i "\$MAIN_INTERFACE" 2>/dev/null | awk '/[0-9]+\\.[0-9]+/{d=\\\$1; v=\\\$NF; if(d~/^[0-9]/) print d" "v}' | tail -7)
+    # 数据源优先级：
+    #   ① /root/traffic_history.log —— 每日 23:59 由 traffic_trend.sh 追加，滚动保留 30 天。
+    #      月度重置会清空 vnstat 数据库，只有这份日志能跨月留存，刚重置完也有数据可看。
+    #   ② vnstat -d —— 日志缺失 / 不可读 / 格式不符时自动降级，保证面板不会因此变空。
+    TREND=""
+    if [ -r /root/traffic_history.log ]; then
+        TREND=\$(awk 'NF==2 && \$1 ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\$/ && \$2 ~ /^[0-9]+([.][0-9]+)?\$/ {print \$1" "\$2}' /root/traffic_history.log 2>/dev/null | tail -7)
+    fi
+    if [ -z "\$TREND" ]; then
+        TREND=\$(vnstat -d -i "\$MAIN_INTERFACE" 2>/dev/null | awk '/[0-9]+\\.[0-9]+/{d=\\\$1; v=\\\$NF; if(d~/^[0-9]/) print d" "v}' | tail -7)
+    fi
     if [ -z "\$TREND" ]; then
         echo -e "  \${C_WHITE}暂无历史数据\${C_RESET}"
     else
@@ -494,8 +525,8 @@ do_uninstall() {
     if [ "\$RM_VNSTAT" = "y" ] || [ "\$RM_VNSTAT" = "Y" ]; then
         rc-service vnstatd stop 2>/dev/null || systemctl stop vnstat 2>/dev/null
         rc-update del vnstatd default 2>/dev/null || systemctl disable vnstat 2>/dev/null
-        apk del vnstat 2>/dev/null || apt-get remove -y vnstat 2>/dev/null
-        rm -rf /var/lib/vnstat
+        apk del vnstat 2>/dev/null    # Alpine 只有 apk；原先是两个发行版的包管理器混写的复制粘贴残留
+        rm -rf -- /var/lib/vnstat
         echo -e "  ✅ vnstat 已卸载"
     else
         echo -e "  -> vnstat 已保留"
@@ -608,7 +639,8 @@ epoch_at() {
 TZOFF=\$(tz_offset)
 
 NOW=\$(date +%s)
-Y=\$(date +%Y); M=\$(date +%-m)
+# 同面板口径：busybox date 不支持 %-m，用 %m 去掉前导 0（与 /root/lin-panel.sh 一致）
+Y=\$(date +%Y); M=\$(date +%m | sed 's/^0//')
 T1=\$(epoch_at \$Y \$M)
 if [ "\$M" -eq 12 ]; then Y2=\$((Y+1)); M2=1; else Y2=\$Y; M2=\$((M+1)); fi
 T2=\$(epoch_at \$Y2 \$M2)
@@ -624,7 +656,19 @@ if [ "\$T1" -gt "\$LAST" ]; then TARGET=\$T1; elif [ "\$T2" -gt "\$LAST" ]; then
 
 # 到达/越过重置点：清空 vnstat 数据，并把一次性基线归零
 systemctl stop vnstat 2>/dev/null || rc-service vnstatd stop 2>/dev/null
-[ -d /var/lib/vnstat ] && rm -rf /var/lib/vnstat/*
+# 清空 vnstat 数据库。安全约束（任一不满足就不删，宁可这次不重置，也不能误删）：
+#   ① 目标必须是字面路径 /var/lib/vnstat；② 不能是符号链接；③ 目录存在且非空；
+#   ④ rm 一律带 -- 与引号，避免路径被当成选项、或符号链接把上级目录展开进来。
+VNSTAT_DB="/var/lib/vnstat"
+if [ -L "\$VNSTAT_DB" ]; then
+    echo "LIN-Panel: \$VNSTAT_DB 是符号链接，拒绝清理，请人工确认后再重置" >&2
+elif [ "\$VNSTAT_DB" != "/var/lib/vnstat" ] || [ ! -d "\$VNSTAT_DB" ]; then
+    echo "LIN-Panel: \$VNSTAT_DB 不存在或路径异常，跳过清理" >&2
+elif [ -z "\$(ls -A "\$VNSTAT_DB" 2>/dev/null)" ]; then
+    :  # 目录为空，无需清理
+else
+    rm -rf -- "\$VNSTAT_DB"/* 2>/dev/null
+fi
 systemctl start vnstat 2>/dev/null || rc-service vnstatd start 2>/dev/null
 # 基线是一次性的：重置后把生成脚本里的 BASELINE 归零，避免每期叠加
 for f in /root/lin-panel.sh /root/lin-panel-en.sh /root/traffic_check.sh; do
@@ -642,7 +686,8 @@ EXISTING_CRON=$(crontab -l 2>/dev/null || true)
 CRON_TREND="59 23 * * * /root/traffic_trend.sh"
 cat << TRENDEOF > /root/traffic_trend.sh
 #!/bin/bash
-# 每日 23:59 记录一次当月累计用量（GB），供面板趋势与历史留存
+# 每日 23:59 记录一次当月累计用量（GB）→ /root/traffic_history.log。
+# 面板 show_trend 优先读这个文件（月度重置会清空 vnstat 库），读不到才降级到 vnstat -d。
 MAIN_IF=\$(ip route get 8.8.8.8 2>/dev/null | awk '{print \$5; exit}')
 [ -z "\$MAIN_IF" ] && MAIN_IF=\$(ip route 2>/dev/null | grep default | awk '{print \$5; exit}')
 [ -z "\$MAIN_IF" ] && MAIN_IF="eth0"
@@ -657,7 +702,9 @@ CRON_SPIKE="*/10 * * * * /root/traffic_spike_check.sh"
 
 # 先剔除本工具自己的旧条目（含早期版本把三条拼成一行的坏条目），再统一重建：
 # 重复安装不会累积，也能顺手修好已经损坏的 crontab
-EXISTING_CRON=$(echo "$EXISTING_CRON" | grep -v 'traffic_trend\.sh\|traffic_reset_check\.sh\|traffic_spike_check\.sh\|traffic_history\.log')
+# 用多个 -e 而不是 BRE 的 \| 交替：busybox grep 不保证支持 \|，一旦失效过滤就变成空操作，
+# 重装时又会重复追加（这是幂等性失效的根因之一）。
+EXISTING_CRON=$(echo "$EXISTING_CRON" | grep -v -e 'traffic_trend\.sh' -e 'traffic_reset_check\.sh' -e 'traffic_spike_check\.sh' -e 'traffic_history\.log')
 
 # 三条条目必须各自独立成行：用 printf 逐条生成真实换行。
 # 不能把换行写成反斜杠加 n 的字面量——printf 的 %s 不解释转义，
@@ -785,7 +832,10 @@ if [ -n "\$CUR_OL" ]; then
         TRAFFIC_BYTES=\$TOTAL
     fi
 fi
-BASELINE_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$BASELINE * 1073741824}")
+# 数值兜底：awk 遇到非法输入会输出空串，空串进 \$(( )) 会让脚本直接崩掉
+BASELINE_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$BASELINE * 1073741824}" 2>/dev/null)
+case "\$BASELINE_BYTES" in ''|*[!0-9]*) BASELINE_BYTES=0 ;; esac
+case "\$TRAFFIC_BYTES" in ''|*[!0-9]*) TRAFFIC_BYTES=0 ;; esac
 TRAFFIC_BYTES=\$(( TRAFFIC_BYTES + BASELINE_BYTES ))
 LIMIT_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$LIMIT * 1073741824}")
 [ "\$LIMIT_BYTES" -le 0 ] 2>/dev/null && exit 0
@@ -852,7 +902,10 @@ if [ -n "\$CUR_OL" ]; then
         TRAFFIC_BYTES=\$TOTAL
     fi
 fi
-BASELINE_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$BASELINE * 1073741824}")
+# 数值兜底：awk 遇到非法输入会输出空串，空串进 \$(( )) 会让脚本直接崩掉
+BASELINE_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$BASELINE * 1073741824}" 2>/dev/null)
+case "\$BASELINE_BYTES" in ''|*[!0-9]*) BASELINE_BYTES=0 ;; esac
+case "\$TRAFFIC_BYTES" in ''|*[!0-9]*) TRAFFIC_BYTES=0 ;; esac
 TRAFFIC_BYTES=\$(( TRAFFIC_BYTES + BASELINE_BYTES ))
 LIMIT_BYTES=\$(awk "BEGIN{printf \"%.0f\", \$LIMIT * 1073741824}")
 [ "\$LIMIT_BYTES" -le 0 ] 2>/dev/null && exit 0
@@ -891,7 +944,10 @@ echo ""
 printf "  请输入短时激增告警阈值(GB/10分钟) [默认: 5，输入 0 禁用此功能]: "
 read SPIKE_LIMIT
 SPIKE_LIMIT="${SPIKE_LIMIT:-5}"
-case "$SPIKE_LIMIT" in ''|*[!0-9.]*) echo -e "  ${C_RED}⚠ 激增阈值必须是非负数字，已使用默认值 5${C_RESET}"; SPIKE_LIMIT=5 ;; esac
+if ! is_num "$SPIKE_LIMIT"; then
+    echo -e "  ${C_RED}⚠ 激增阈值必须是非负数字（如 5 或 0.5），已使用默认值 5${C_RESET}"
+    SPIKE_LIMIT=5
+fi
 if [ "$SPIKE_LIMIT" = "0" ]; then
     echo -e "  -> 短时激增告警: ${C_RED}已禁用${C_RESET}"
 else
