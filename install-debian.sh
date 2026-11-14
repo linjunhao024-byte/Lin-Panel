@@ -40,7 +40,7 @@ echo -e "${C_CYAN}┌──────────── 自定义配置 ──
 echo ""
 
 printf "请输入流量上限(GB) [默认: 350]: "
-read LIMIT
+read -r LIMIT
 LIMIT="${LIMIT:-350}"
 echo -e "  -> 流量上限设置为: ${C_YELLOW}${LIMIT}GB${C_RESET}"
 if ! is_num "$LIMIT"; then
@@ -54,7 +54,7 @@ printf "  [1] 双向计费 (入站+出站) [默认]\n"
 printf "  [2] 入站计费 (仅下载)\n"
 printf "  [3] 出站计费 (仅上传)\n"
 printf "  请选择 [1/2/3] [默认: 1]: "
-read BILLING
+read -r BILLING
 case "$BILLING" in
     2) BILLING_MODE=2; echo -e "  -> 计费模式: ${C_YELLOW}入站计费 (仅下载 RX)${C_RESET}" ;;
     3) BILLING_MODE=3; echo -e "  -> 计费模式: ${C_YELLOW}出站计费 (仅上传 TX)${C_RESET}" ;;
@@ -64,25 +64,25 @@ echo ""
 
 printf "请输入每月流量重置时间\n"
 printf "  日期 (1-31) [默认 1]: "
-read DAY
+read -r DAY
 DAY="${DAY:-1}"
 case "$DAY" in [1-9]|[12][0-9]|3[01]) ;; *) echo -e "  ${C_RED}⚠ 日期无效，已使用默认值 1${C_RESET}"; DAY=1 ;;
 esac
 
 printf "  小时 (0-23) [默认 0]: "
-read HOUR
+read -r HOUR
 HOUR="${HOUR:-0}"
 case "$HOUR" in [0-9]|1[0-9]|2[0-3]) ;; *) echo -e "  ${C_RED}⚠ 小时无效，已使用默认值 0${C_RESET}"; HOUR=0 ;;
 esac
 
 printf "  分钟 (0-59) [默认 0]: "
-read MINUTE
+read -r MINUTE
 MINUTE="${MINUTE:-0}"
 case "$MINUTE" in [0-9]|[1-4][0-9]|5[0-9]) ;; *) echo -e "  ${C_RED}⚠ 分钟无效，已使用默认值 0${C_RESET}"; MINUTE=0 ;;
 esac
 
 printf "  秒数 (0-59) [默认 0]: "
-read SECOND
+read -r SECOND
 SECOND="${SECOND:-0}"
 case "$SECOND" in [0-9]|[1-4][0-9]|5[0-9]) ;; *) echo -e "  ${C_RED}⚠ 秒数无效，已使用默认值 0${C_RESET}"; SECOND=0 ;;
 esac
@@ -90,7 +90,7 @@ echo -e "  -> 重置时间设置为: 每月 ${C_YELLOW}${DAY}日 ${HOUR}:${MINUT
 echo ""
 
 printf "是否在每次通过 SSH 登录服务器时，自动展示流量监控面板？[Y/n] [默认: Y]: "
-read LOGIN_AUTO
+read -r LOGIN_AUTO
 if [ "$LOGIN_AUTO" = "N" ] || [ "$LOGIN_AUTO" = "n" ]; then
     ENABLE_LOGIN_AUTO=0
     echo -e "  -> 登录自启: ${C_RED}已关闭${C_RESET}"
@@ -101,7 +101,7 @@ fi
 echo ""
 
 printf "请输入您的快捷命令名称 [默认: lin-panel]: "
-read CMD
+read -r CMD
 CMD="${CMD:-lin-panel}"
 case "$CMD" in */*|*\ *|*[\<\>\&\|\;\$\`\!]*) echo -e "  ${C_RED}⚠ 命令名包含非法字符，已使用默认值 lin-panel${C_RESET}"; CMD="lin-panel" ;;
 esac
@@ -116,7 +116,7 @@ echo -e "  -> 快捷命令设置为: ${C_YELLOW}${CMD}${C_RESET}"
 echo ""
 
 printf "服务器是否已运行一段时间？请输入本月已使用流量(GB) [默认: 0]: "
-read BASELINE
+read -r BASELINE
 BASELINE="${BASELINE:-0}"
 if ! is_num "$BASELINE"; then
     echo -e "  ${C_RED}⚠ 输入无效（须为非负数字，如 0 或 12.5），已使用默认值 0${C_RESET}"
@@ -148,7 +148,7 @@ printf "    [8] Europe/Berlin    (UTC+1)  欧洲\n"
 printf "    [9] UTC              (UTC+0)  格林威治\n"
 printf "    [0] 不修改\n"
 printf "  请选择 [0-9] [默认: 0]: "
-read TZ_CHOICE
+read -r TZ_CHOICE
 case "$TZ_CHOICE" in
     1) TZ_TARGET="Asia/Shanghai" ;;
     2) TZ_TARGET="Asia/Hong_Kong" ;;
@@ -374,7 +374,7 @@ show_trend() {
         echo -e "  \${C_WHITE}暂无历史数据\${C_RESET}"
     else
         MAX_V=\$(echo "\$TREND" | awk '{if(\\\$2+0>max)max=\\\$2+0}END{print max}')
-        echo "\$TREND" | while read DATE VAL; do
+        echo "\$TREND" | while read -r DATE VAL; do
             N=\$(awk "BEGIN{printf \\"%.0f\\", \$VAL * 30 / \$MAX_V}")
             BAR=""
             i=0
@@ -401,11 +401,11 @@ show_conn() {
     echo ""
     echo -e "  \${C_WHITE}🔍 本地监听端口 Top 5:\${C_RESET}"
     if command -v ss >/dev/null 2>&1; then
-        ss -tun state established 2>/dev/null | tail -n +2 | awk '{print \$4}' | grep -oE ':[0-9]+' | sort | uniq -c | sort -rn | head -5 | while read CNT PORT; do
+        ss -tun state established 2>/dev/null | tail -n +2 | awk '{print \$4}' | grep -oE ':[0-9]+' | sort | uniq -c | sort -rn | head -5 | while read -r CNT PORT; do
             echo -e "    \${C_YELLOW}\${CNT}\${C_RESET} 次  →  \${C_CYAN}\${PORT}\${C_RESET}"
         done
     elif command -v netstat >/dev/null 2>&1; then
-        netstat -an 2>/dev/null | grep ESTABLISHED | awk '{print \$4}' | grep -oE ':[0-9]+' | sort | uniq -c | sort -rn | head -5 | while read CNT PORT; do
+        netstat -an 2>/dev/null | grep ESTABLISHED | awk '{print \$4}' | grep -oE ':[0-9]+' | sort | uniq -c | sort -rn | head -5 | while read -r CNT PORT; do
             echo -e "    \${C_YELLOW}\${CNT}\${C_RESET} 次  →  \${C_CYAN}\${PORT}\${C_RESET}"
         done
     fi
@@ -471,7 +471,7 @@ do_modify_spike() {
         echo -e "  \${C_WHITE}当前阈值: \${C_YELLOW}\${CUR} GB/10分钟\${C_RESET}"
     fi
     printf "  请输入新阈值(GB/10分钟) [输入 0 禁用]: "
-    read NEW_SPIKE
+    read -r NEW_SPIKE
     case "\$NEW_SPIKE" in ''|*[!0-9.]*) echo -e "  \${C_RED}⚠ 请输入数字（GB/10分钟）\${C_RESET}"; NEW_SPIKE="" ;; esac
     if [ -z "\$NEW_SPIKE" ]; then
         echo -e "  \${C_YELLOW}已取消\${C_RESET}"
@@ -490,7 +490,7 @@ do_uninstall() {
     echo ""
     echo -e "\${C_RED}  ⚠️  即将卸载 LIN-Panel 及所有相关文件\${C_RESET}"
     printf "  确认卸载？[y/N]: "
-    read CONFIRM
+    read -r CONFIRM
     if [ "\$CONFIRM" != "y" ] && [ "\$CONFIRM" != "Y" ]; then
         echo -e "  \${C_GREEN}已取消\${C_RESET}"
         return
@@ -504,6 +504,10 @@ do_uninstall() {
     rm -f /root/traffic_history.log
     echo -e "  ✅ 流量日志已删除"
     rm -f /usr/local/bin/"${CMD}"
+    # 安装后改过命令名/手工换过名字时，上面那行删不到；再扫一遍指向面板脚本的软链
+    for L in /usr/local/bin/*; do
+        [ -L "\$L" ] && [ "\$(readlink "\$L")" = "/root/lin-panel.sh" ] && rm -f "\$L"
+    done
     echo -e "  ✅ 快捷命令已删除"
    
     EXISTING=\$(crontab -l 2>/dev/null || true)
@@ -518,7 +522,7 @@ do_uninstall() {
     sed -i '/lin-panel/d' /root/.profile 2>/dev/null
     echo ""
     printf "  是否同时卸载 vnstat（流量统计工具）？[y/N] [默认: N]: "
-    read RM_VNSTAT
+    read -r RM_VNSTAT
     if [ "\$RM_VNSTAT" = "y" ] || [ "\$RM_VNSTAT" = "Y" ]; then
         systemctl stop vnstat 2>/dev/null || systemctl stop vnstat 2>/dev/null
         systemctl disable vnstat 2>/dev/null || systemctl disable vnstat 2>/dev/null
@@ -558,7 +562,7 @@ trap 'echo ""; exit 0' INT
 while true; do
     show_menu
     printf "  \${C_WHITE}请选择 > \${C_RESET}"
-    read CHOICE
+    read -r CHOICE
     case "\$CHOICE" in
         1) exec "\$0" ;;
         2) show_trend ;;
@@ -720,15 +724,15 @@ echo -e "  -> 每月流量重置已配置: ${C_YELLOW}每月${DAY}日 ${HOUR}:${
 echo -e "${C_GREEN}[6/7] 📱 正在配置 Telegram 流量推送...${C_RESET}"
 
 printf "  是否启用 Telegram 流量推送？[Y/n] [默认: N]: "
-read TG_ENABLE
+read -r TG_ENABLE
 if [ "$TG_ENABLE" = "Y" ] || [ "$TG_ENABLE" = "y" ]; then
     TG_OK=0
     while [ "$TG_OK" = "0" ]; do
         printf "  请输入 Telegram Bot Token: "
-        read TG_TOKEN
+        read -r TG_TOKEN
 case "$TG_TOKEN" in ''|*[!0-9A-Za-z_:\-]*) echo -e "  ${C_RED}⚠ Token 格式不对（形如 123456:AA-xxx），请重新输入${C_RESET}"; continue ;; esac
         printf "  请输入 Telegram Chat ID: "
-        read TG_CHAT
+        read -r TG_CHAT
 case "$TG_CHAT" in -[0-9]*|[0-9]*|@*) ;; *) echo -e "  ${C_RED}⚠ Chat ID 格式不对（数字或以 @ 开头的频道名），请重新输入${C_RESET}"; continue ;; esac
         echo ""
         echo -e "  ${C_WHITE}正在发送测试消息...${C_RESET}"
@@ -744,7 +748,7 @@ case "$TG_CHAT" in -[0-9]*|[0-9]*|@*) ;; *) echo -e "  ${C_RED}⚠ Chat ID 格�
             printf "  [2] 跳过推送\n"
             printf "  [3] 仍然启用（不推荐）\n"
             printf "  请选择 [1/2/3] [默认: 1]: "
-            read TG_RETRY
+            read -r TG_RETRY
             case "$TG_RETRY" in
                 2) TG_ENABLE="n"; TG_OK=1 ;;
                 3) TG_OK=1 ;;
@@ -760,11 +764,10 @@ case "$TG_CHAT" in -[0-9]*|[0-9]*|@*) ;; *) echo -e "  ${C_RED}⚠ Chat ID 格�
     printf "    [2] 每周汇报\n"
     printf "    [3] 每月汇报\n"
     printf "  请选择 [1/2/3] [默认: 1]: "
-    read TG_FREQ
-
+    read -r TG_FREQ
     if [ "$TG_FREQ" = "1" ]; then
         printf "  请选择每日推送时间 (0-23) [默认: 9]: "
-        read TG_HOUR
+        read -r TG_HOUR
         TG_HOUR="${TG_HOUR:-9}"
         case "$TG_HOUR" in [0-9]|1[0-9]|2[0-3]) ;; *) echo -e "  ${C_RED}⚠ 小时无效，已使用默认值 9${C_RESET}"; TG_HOUR=9 ;; esac
         TG_CRON="0 ${TG_HOUR} * * *"
@@ -774,7 +777,7 @@ case "$TG_CHAT" in -[0-9]*|[0-9]*|@*) ;; *) echo -e "  ${C_RED}⚠ Chat ID 格�
         printf "    [1] 周一  [2] 周二  [3] 周三  [4] 周四\n"
         printf "    [5] 周五  [6] 周六  [7] 周日\n"
         printf "  请选择 [1-7] [默认: 1]: "
-        read TG_WEEKDAY
+        read -r TG_WEEKDAY
         case "$TG_WEEKDAY" in
             2) TG_WEEKDAY=2 ;;
             3) TG_WEEKDAY=3 ;;
@@ -785,7 +788,7 @@ case "$TG_CHAT" in -[0-9]*|[0-9]*|@*) ;; *) echo -e "  ${C_RED}⚠ Chat ID 格�
             *) TG_WEEKDAY=1 ;;
         esac
         printf "  请选择推送时间 (0-23) [默认: 12]: "
-        read TG_HOUR
+        read -r TG_HOUR
         TG_HOUR="${TG_HOUR:-12}"
         case "$TG_HOUR" in [0-9]|1[0-9]|2[0-3]) ;; *) echo -e "  ${C_RED}⚠ 小时无效，已使用默认值 12${C_RESET}"; TG_HOUR=12 ;; esac
         WEEKDAY_LABEL="周日"
@@ -937,7 +940,7 @@ fi
 
 echo ""
 printf "  请输入短时激增告警阈值(GB/10分钟) [默认: 5，输入 0 禁用此功能]: "
-read SPIKE_LIMIT
+read -r SPIKE_LIMIT
 SPIKE_LIMIT="${SPIKE_LIMIT:-5}"
 if ! is_num "$SPIKE_LIMIT"; then
     echo -e "  ${C_RED}⚠ 激增阈值必须是非负数字（如 5 或 0.5），已使用默认值 5${C_RESET}"
@@ -1045,7 +1048,7 @@ echo -e "${C_YELLOW}  ⭐ 如果这个面板对你有帮助，请给个 Star 支
 echo -e "${C_WHITE}  🔗 https://github.com/linjunhao024-byte/Lin-Panel${C_RESET}"
 echo ""
 printf "是否立即进入面板？[Y/n] [默认: Y]: "
-read ENTER_PANEL
+read -r ENTER_PANEL
 if [ "$ENTER_PANEL" != "N" ] && [ "$ENTER_PANEL" != "n" ]; then
     /root/lin-panel.sh
 fi
